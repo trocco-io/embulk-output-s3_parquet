@@ -11,7 +11,7 @@ jobs:
       localstack:
         image: localstack/localstack
         ports:
-          - 4572:4572
+          - 4566:4566
         env:
           SERVICES: s3
 
@@ -21,6 +21,8 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
-    - name: Test with Gradle
-      run: ./gradlew test
+    - name: scalafmt
+      run: ./gradlew spotlessCheck
+    - name: scalatest
+      run: ./gradlew scalatest
 
