@@ -13,12 +13,13 @@ import com.amazonaws.services.s3.transfer.{
   TransferManagerBuilder
 }
 import com.google.inject.{Binder, Guice, Module, Stage}
+import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path => HadoopPath}
+import org.apache.parquet.avro.AvroReadSupport
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetReader}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
-import org.apache.parquet.tools.read.{SimpleReadSupport, SimpleRecord}
 import org.embulk.{TestPluginSourceModule, TestUtilityModule}
 import org.embulk.config.{
   ConfigLoader,
@@ -88,7 +89,7 @@ abstract class EmbulkPluginTestHelper
 
   private var exec: ExecSession = _
 
-  val TEST_S3_ENDPOINT: String = "http://localhost:4572"
+  val TEST_S3_ENDPOINT: String = "http://localhost:4566"
   val TEST_S3_REGION: String = "us-east-1"
   val TEST_S3_ACCESS_KEY_ID: String = "test"
   val TEST_S3_SECRET_ACCESS_KEY: String = "test"
@@ -229,27 +230,18 @@ abstract class EmbulkPluginTestHelper
       )
     ) { reader => messageTypeTest(reader.getFileMetaData.getSchema) }
 
-    val reader: ParquetReader[SimpleRecord] = ParquetReader
+    val reader: ParquetReader[GenericRecord] = ParquetReader
       .builder(
-        new SimpleReadSupport(),
+        new AvroReadSupport[GenericRecord](),
         new HadoopPath(pathString)
       )
       .build()
 
-    def read(
-        reader: ParquetReader[SimpleRecord],
-        records: Seq[Seq[AnyRef]] = Seq()
-    ): Seq[Seq[AnyRef]] = {
-      val simpleRecord: SimpleRecord = reader.read()
-      if (simpleRecord != null) {
-        val r: Seq[AnyRef] = simpleRecord.getValues
-          .map(_.getValue)
-        return read(reader, records :+ r)
-      }
-      records
-    }
-    try read(reader)
-    finally reader.close()
+    Iterator
+      .continually(reader.read())
+      .takeWhile(_ != null)
+      .map(record => record.getSchema.getFields.map(f => record.get(f.name())))
+      .toSeq
   }
 
   def loadConfigSourceFromYamlString(yaml: String): ConfigSource =
