@@ -1,6 +1,6 @@
 # S3 Parquet output plugin for Embulk
 
-![Release CI Status Badge](https://github.com/civitaspo/embulk-output-s3_parquet/workflows/Release%20CI/badge.svg) ![Test CI Status Badge](https://github.com/civitaspo/embulk-output-s3_parquet/workflows/Test%20CI/badge.svg)
+[![Release CI Status Badge](https://github.com/civitaspo/embulk-output-s3_parquet/workflows/Release%20CI/badge.svg)](https://github.com/civitaspo/embulk-output-s3_parquet/actions?query=workflow%3A%22Release+CI%22) [![Test CI Status Badge](https://github.com/civitaspo/embulk-output-s3_parquet/workflows/Test%20CI/badge.svg)](https://github.com/civitaspo/embulk-output-s3_parquet/actions?query=workflow%3A%22Test+CI%22)
 
 [Embulk](https://github.com/embulk/embulk/) output plugin to dump records as [Apache Parquet](https://parquet.apache.org/) files on S3.
 
@@ -24,7 +24,16 @@
 - **column_options**: a map whose keys are name of columns, and values are configuration with following parameters (optional)
   - **timezone**: timezone if type of this column is timestamp. If not set, **default_timezone** is used. (string, optional)
   - **format**: timestamp format if type of this column is timestamp. If not set, **default_timestamp_format**: is used. (string, optional)
-  - **logical_type**: a Parquet logical type name (`timestamp-millis`, `timestamp-micros`, `json`, `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) (string, optional)
+  - **converted_type**: a Parquet converted type name (`timestamp-millis`, `timestamp-micros`, `timestamp-nanos`, `json`, `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) (string, optional)
+  - **logical_type**: **[DEPRECATED: Use **converted_type** instead]** a Parquet converted type name (`timestamp-millis`, `timestamp-micros`, `timestamp-nanos`, `json`, `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) (string, optional)
+  - **logical_type**: configuration for the detailed logical type. See [Logical Type Specification](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.7.0/LogicalTypes.md) (optional)
+    - **name**: The name of logical type (`"date"`, `"decimal"`, `"int"`, `"json"`, `"time"`, `"timestamp"`) (string, required)
+    - **bit_width**: The bit width for `"int"` logical type (Allowed bit width values are `8`, `16`, `32`, `64`). (int, default: `64`)
+    - **is_signed**: Signed or not for `"int"` logical type (boolean, default: `true`)
+    - **scale**: The scale for `"decimal"` logical type (int, default: `0`)
+    - **precision**: The precision for `"decimal"` logical type (int, default: `0`)
+    - **is_adjusted_to_utc**: (boolean, default: `true`)
+    - **time_unit**: The precision for `"time"` or `"timestamp"` logical type (Allowed values are `"MILLIS`, `MICROS`, `NANOS`)
 - **canned_acl**: grants one of [canned ACLs](https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL) for created objects (string, default: `private`)
 - **block_size**: The block size is the size of a row group being buffered in memory. This limits the memory usage when writing. Larger values will improve the I/O when reading but consume more memory when writing. (int, default: `134217728` (128MB))
 - **page_size**: The page size is for compression. When reading, each page can be decompressed independently. A block is composed of pages. The page is the smallest unit that must be read fully to access a single record. If this value is too small, the compression will deteriorate. (int, default: `1048576` (1MB))
@@ -80,10 +89,11 @@
       |timestamp|string|
       |json|string|
       
-      |parquet logical type|glue data type|note|
+      |parquet converted type|glue data type|note|
       |:---|:---|:---|
       |timestamp-millis|timestamp||
       |timestamp-micros|long|Glue cannot recognize timestamp-micros.|
+      |timestamp-nanos|long|Glue cannot recognize timestamp-nanos.|
       |int8|tinyint||
       |int16|smallint||
       |int32|int||
@@ -105,7 +115,16 @@
   - **password** proxy password (string, optional)
 - **buffer_dir**: buffer directory for parquet files to be uploaded on S3 (string, default: Create a Temporary Directory)
 - **type_options**:  a map whose keys are name of embulk type(`boolean`, `long`, `double`, `string`, `timestamp`, `json`), and values are configuration with following parameters (optional)
-  - **logical_type**: a Parquet logical type name (`timestamp-millis`, `timestamp-micros`, `json`, `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) (string, optional)
+  - **converted_type**: a Parquet converted type name (`timestamp-millis`, `timestamp-micros`, `timestamp-nanos`, `json`, `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) (string, optional)
+  - **logical_type**: **[DEPRECATED: Use **converted_type** instead]** a Parquet converted type name (`timestamp-millis`, `timestamp-micros`, `timestamp-nanos`, `json`, `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`) (string, optional)
+  - **logical_type**: configuration for the detailed logical type. See [Logical Type Specification](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.7.0/LogicalTypes.md) (optional)
+    - **name**: The name of logical type (`"date"`, `"decimal"`, `"int"`, `"json"`, `"time"`, `"timestamp"`) (string, required)
+    - **bit_width**: The bit width for `"int"` logical type (Allowed bit width values are `8`, `16`, `32`, `64`). (int, default: `64`)
+    - **is_signed**: Signed or not for `"int"` logical type (boolean, default: `true`)
+    - **scale**: The scale for `"decimal"` logical type (int, default: `0`)
+    - **precision**: The precision for `"decimal"` logical type (int, default: `0`)
+    - **is_adjusted_to_utc**: (boolean, default: `true`)
+    - **time_unit**: The precision for `"time"` or `"timestamp"` logical type (Allowed values are `"MILLIS`, `MICROS`, `NANOS`)
 
 
 ## Example
@@ -123,7 +142,7 @@ out:
 
 ## Note
 
-* The current Parquet [LogicalTypes](https://github.com/apache/parquet-format/blob/2b38663/LogicalTypes.md) implementation does only old representation.
+* This plugin implements the Parquet [LogicalTypes](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.8.0/LogicalTypes.md) as much as possible. But it does not implement all of ones.
 * Some kind of LogicalTypes are sometimes not supported on your middleware. Be careful to giving logical type name.
 
 ## Development
@@ -131,22 +150,23 @@ out:
 ### Run example:
 
 ```shell
-$ ./gradlew classpath
-$ embulk run example/config.yml -Ilib
+$ ./run_s3_local.sh
+$ ./example/prepare_s3_bucket.sh
+$ ./gradlew gem
+$ embulk run example/config.yml -Ibuild/gemContents/lib
 ```
 
 ### Run test:
 
 ```shell
-## Run fake S3 with localstack
-$ docker run -it --rm -p 4572:4572 -e SERVICES=s3 localstack/localstack
-$ ./gradlew test
+$ ./run_s3_local.sh
+$ ./gradlew scalatest
 ```
 
 ### Build
 
 ```
-$ ./gradlew gem  # -t to watch change of files and rebuild continuously
+$ ./gradlew gem --write-locks  # -t to watch change of files and rebuild continuously
 ```
 
 ### Release gem:
@@ -160,7 +180,3 @@ $ ./gradlew gemPush
 ## ChangeLog
 
 [CHANGELOG.md](./CHANGELOG.md)
-
-## Contributors
-
-- @syucream
