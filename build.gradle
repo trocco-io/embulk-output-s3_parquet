@@ -11,7 +11,7 @@ repositories {
 }
 
 group = "pro.civitaspo"
-version = "0.5.3"
+version = "0.5.3.dev1"
 description = "Dumps records to S3 Parquet."
 
 sourceCompatibility = 1.8
@@ -19,7 +19,7 @@ targetCompatibility = 1.8
 
 dependencies {
     compileOnly "org.embulk:embulk-spi:0.11"
-    compileOnly "org.embulk:embulk-util-config:0.3.4"
+    implementation "org.embulk:embulk-util-config:0.3.4"
     implementation "org.embulk:embulk-util-timestamp:0.2.2"
     implementation "org.scala-lang:scala-library:2.13.1"
 

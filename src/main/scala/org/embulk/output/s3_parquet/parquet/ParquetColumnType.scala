@@ -16,8 +16,9 @@ import org.embulk.util.config.{Config, ConfigDefault, Task => EmbulkTask}
 import org.embulk.config.{ConfigException, ConfigSource}
 import org.embulk.output.s3_parquet.catalog.GlueDataType
 import org.embulk.output.s3_parquet.implicits
-import org.embulk.spi.{Column, DataException, Exec}
+import org.embulk.spi.{Column, DataException}
 import org.embulk.spi.time.Timestamp
+import org.embulk.output.s3_parquet.PluginTask
 import org.embulk.util.timestamp.TimestampFormatter
 import org.msgpack.value.Value
 import org.slf4j.{Logger, LoggerFactory}
@@ -101,7 +102,7 @@ object ParquetColumnType {
         }
 
         def build(): ConfigSource = {
-          val c = Exec.newConfigSource()
+          val c = PluginTask.getConfigMapperFactory.newConfigSource()
           name.foreach(c.set("name", _))
           precision.foreach(c.set("precision", _))
           scale.foreach(c.set("scale", _))
