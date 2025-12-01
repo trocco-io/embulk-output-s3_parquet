@@ -27,8 +27,10 @@
 - `ConfigMapperFactory`を使用した新しいAPI実装
 - `loadConfig()`: `ConfigMapper`を使用してConfigSourceからTaskを生成
 - `loadTask()`: `TaskMapper`を使用してTaskSourceからTaskを生成
-- `dumpTask()`: **Javaリフレクションを使用**してTaskのgetterメソッドから値を取得し、TaskSourceに設定
-  - Jacksonのバージョン競合を回避するため、リフレクションベースの実装に変更
+- `dumpTask()`: **Javaリフレクションと@Configアノテーションを使用**してTaskの値をTaskSourceにコピー
+  - `Exec.newTaskSource()`を使用してTaskSourceを作成
+  - `@Config`アノテーションから正しいプロパティ名を取得
+  - 各getterメソッドを呼び出して値をTaskSourceに設定
 
 #### S3ParquetOutputPlugin.scala
 - `transaction()`メソッドで`PluginTask.dumpTask()`を使用するように変更

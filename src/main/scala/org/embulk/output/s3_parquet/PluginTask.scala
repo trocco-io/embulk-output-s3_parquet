@@ -137,29 +137,36 @@ object PluginTask {
   }
 
   def dumpTask(task: PluginTask): TaskSource = {
-    // Use reflection to copy all getter values to TaskSource
-    val taskSource = CONFIG_MAPPER_FACTORY.newTaskSource()
+    // In Embulk 0.11, we need to manually create TaskSource and copy values
+    // Use Exec.newTaskSource() to create a new TaskSource
+    val taskSource = org.embulk.spi.Exec.newTaskSource()
 
-    // Get all methods from the task interface
-    val methods = task.getClass.getMethods
-
-    methods.foreach { method =>
-      val methodName = method.getName
-      // Find getter methods (starts with "get" and has no parameters)
-      if (methodName.startsWith("get") && method.getParameterCount == 0 && methodName != "getClass") {
+    // Get all methods with @Config annotation and copy their values
+    val taskClass = classOf[PluginTask]
+    taskClass.getMethods.foreach { method =>
+      val configAnnotation = method.getAnnotation(classOf[Config])
+      if (configAnnotation != null && method.getParameterCount == 0) {
+        val key = configAnnotation.value()
         try {
           val value = method.invoke(task)
           if (value != null) {
-            // Convert getter name to property name (e.g., getBucket -> bucket)
-            val propertyName =
-              methodName.substring(3, 4).toLowerCase + methodName.substring(4)
-            taskSource.set(propertyName, value)
+            taskSource.set(key, value)
           }
         }
         catch {
           case _: Exception => // Ignore methods that can't be invoked
         }
       }
+    }
+
+    // Also need to copy non-@Config properties that have setters
+    // These are properties set by loadConfig (like compressionCodec, cannedAcl)
+    try {
+      taskSource.set("compressionCodec", task.getCompressionCodec)
+      taskSource.set("cannedAcl", task.getCannedAcl)
+    }
+    catch {
+      case _: Exception => // Ignore if these fail
     }
 
     taskSource
