@@ -4,7 +4,7 @@ import java.util.Optional
 
 import com.amazonaws.ClientConfiguration
 import com.amazonaws.client.builder.AwsClientBuilder
-import org.embulk.config.{Config, ConfigDefault}
+import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.output.s3_parquet.aws.AwsClientConfiguration.Task
 
 object AwsClientConfiguration {

@@ -3,7 +3,8 @@ package org.embulk.output.s3_parquet.aws
 import java.util.Optional
 
 import com.amazonaws.{ClientConfiguration, Protocol}
-import org.embulk.config.{Config, ConfigDefault, ConfigException}
+import org.embulk.util.config.{Config, ConfigDefault}
+import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.aws.HttpProxy.Task
 
 object HttpProxy {

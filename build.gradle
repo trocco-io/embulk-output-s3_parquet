@@ -2,7 +2,7 @@ plugins {
     id "scala"
     id "maven-publish"
     id "com.diffplug.gradle.spotless" version "3.27.1"
-    id "org.embulk.embulk-plugins" version "0.4.1"
+    id "org.embulk.embulk-plugins" version "0.7.0"
 }
 
 repositories {
@@ -18,12 +18,13 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 dependencies {
-    compileOnly "org.embulk:embulk-core:0.9.23"
-    // NOTE: Is shadow plugin required in the future?
-    compile "org.scala-lang:scala-library:2.13.1"
+    compileOnly "org.embulk:embulk-spi:0.11"
+    compileOnly "org.embulk:embulk-util-config:0.3.4"
+    implementation "org.embulk:embulk-util-timestamp:0.2.2"
+    implementation "org.scala-lang:scala-library:2.13.1"
 
     ['glue', 's3', 'sts'].each { v ->
-        compile("com.amazonaws:aws-java-sdk-${v}:1.11.769") {
+        implementation("com.amazonaws:aws-java-sdk-${v}:1.11.769") {
             exclude group: 'joda-time', module: 'joda-time'
             exclude group: 'com.fasterxml.jackson.core', module: 'jackson-annotations'
             exclude group: 'com.fasterxml.jackson.core', module: 'jackson-databind'
@@ -31,28 +32,28 @@ dependencies {
         }
     }
     ['column', 'common', 'encoding', 'hadoop', 'jackson'].each { v ->
-        compile("org.apache.parquet:parquet-${v}:1.11.0") {
+        implementation("org.apache.parquet:parquet-${v}:1.11.0") {
             exclude group: 'org.slf4j', module: 'slf4j-api'
         }
     }
     // ref. https://github.com/apache/parquet-mr/blob/apache-parquet-1.11.0/pom.xml#L85
-    compile('org.apache.parquet:parquet-format:2.7.0') {
+    implementation('org.apache.parquet:parquet-format:2.7.0') {
         exclude group: 'org.slf4j', module: 'slf4j-api'
     }
-    compile('org.apache.hadoop:hadoop-common:2.10.2') {
+    implementation('org.apache.hadoop:hadoop-common:2.10.2') {
         exclude group: 'org.slf4j', module: 'slf4j-api'
         exclude group: 'com.google.guava', module: 'guava'
         exclude group: 'commons-beanutils', module: 'commons-beanutils-core'
         exclude group: 'org.apache.commons', module: 'commons-lang3'
         exclude group: 'com.fasterxml.jackson.core', module: 'jackson-core'
     }
-    compile 'org.xerial.snappy:snappy-java:1.1.7.3'
+    implementation 'org.xerial.snappy:snappy-java:1.1.7.3'
 
-    ['core', 'standards', 'deps-buffer', 'deps-config'].each { v ->
-        testImplementation "org.embulk:embulk-${v}:0.9.23"
-    }
-    testImplementation "org.embulk:embulk-core:0.9.23:tests"
+    testImplementation "org.embulk:embulk-spi:0.11"
+    testImplementation "org.embulk:embulk-util-config:0.3.4"
+    testImplementation "org.embulk:embulk-util-timestamp:0.2.2"
     testImplementation "org.scalatest:scalatest_2.13:3.1.1"
+    testImplementation "junit:junit:4.13.2"
     testImplementation 'org.apache.parquet:parquet-avro:1.11.0'
     testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-avro:2.14.0'
     testImplementation 'org.apache.hadoop:hadoop-client:2.10.2'

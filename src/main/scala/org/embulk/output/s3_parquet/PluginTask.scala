@@ -4,14 +4,8 @@ import java.util.{Locale, MissingFormatArgumentException, Optional}
 
 import com.amazonaws.services.s3.model.CannedAccessControlList
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.embulk.config.{
-  Config,
-  ConfigDefault,
-  ConfigException,
-  ConfigSource,
-  Task,
-  TaskSource
-}
+import org.embulk.util.config.{Config, ConfigDefault, Task}
+import org.embulk.config.{ConfigException, ConfigSource, TaskSource}
 import org.embulk.output.s3_parquet.aws.Aws
 import org.embulk.output.s3_parquet.catalog.CatalogRegistrator
 import org.embulk.output.s3_parquet.parquet.ParquetFileWriteSupport
