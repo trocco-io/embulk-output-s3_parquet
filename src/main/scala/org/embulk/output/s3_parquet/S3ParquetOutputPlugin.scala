@@ -33,7 +33,7 @@ class S3ParquetOutputPlugin extends OutputPlugin {
     val task: PluginTask = PluginTask.loadConfig(config)
     val support: ParquetFileWriteSupport = ParquetFileWriteSupport(task, schema)
     support.showOutputSchema(logger)
-    control.run(task.dump)
+    control.run(PluginTask.dumpTask(task))
 
     task.getCatalog.ifPresent { catalog =>
       val location =

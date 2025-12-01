@@ -12,7 +12,7 @@ import org.embulk.util.config.{
   Task,
   TaskMapper
 }
-import org.embulk.config.{ConfigException, ConfigSource, TaskSource}
+import org.embulk.config.{ConfigException, ConfigSource, DataSource, TaskSource}
 import org.embulk.output.s3_parquet.aws.Aws
 import org.embulk.output.s3_parquet.catalog.CatalogRegistrator
 import org.embulk.output.s3_parquet.parquet.ParquetFileWriteSupport
@@ -134,6 +134,33 @@ object PluginTask {
   def loadTask(taskSource: TaskSource): PluginTask = {
     val taskMapper: TaskMapper = CONFIG_MAPPER_FACTORY.createTaskMapper()
     taskMapper.map(taskSource, classOf[PluginTask])
+  }
+
+  def dumpTask(task: PluginTask): TaskSource = {
+    // In Embulk 0.11, we need to use Exec.newTaskSource() and manually copy fields
+    // However, since Task interface is a proxy, we can use reflection or Jackson
+    import com.fasterxml.jackson.databind.ObjectMapper
+    import com.fasterxml.jackson.module.scala.DefaultScalaModule
+
+    val objectMapper = new ObjectMapper()
+    objectMapper.registerModule(DefaultScalaModule)
+
+    val taskSource = CONFIG_MAPPER_FACTORY.newTaskSource()
+    val jsonNode =
+      objectMapper.valueToTree[com.fasterxml.jackson.databind.JsonNode](task)
+    val fields = jsonNode.fields()
+
+    while (fields.hasNext) {
+      val entry = fields.next()
+      val key = entry.getKey
+      val value = entry.getValue
+
+      if (!value.isNull) {
+        taskSource.set(key, objectMapper.treeToValue(value, classOf[Object]))
+      }
+    }
+
+    taskSource
   }
 
   def getConfigMapperFactory: ConfigMapperFactory = CONFIG_MAPPER_FACTORY
