@@ -19,7 +19,7 @@
 - `embulk-spi`: 0.11 (compileOnly)
 - `embulk-util-config`: 0.3.4 (implementation)
 - `embulk-util-timestamp`: 0.2.2 (implementation)
-- `jackson-module-scala_2.13`: 2.14.0 (implementation) - 新規追加
+- **削除**: `jackson-module-scala_2.13` (Jacksonバージョン競合を回避するため)
 
 ### 4. コード変更
 
@@ -27,7 +27,8 @@
 - `ConfigMapperFactory`を使用した新しいAPI実装
 - `loadConfig()`: `ConfigMapper`を使用してConfigSourceからTaskを生成
 - `loadTask()`: `TaskMapper`を使用してTaskSourceからTaskを生成
-- `dumpTask()`: Jackson ObjectMapperを使用してTaskをTaskSourceに変換
+- `dumpTask()`: **Javaリフレクションを使用**してTaskのgetterメソッドから値を取得し、TaskSourceに設定
+  - Jacksonのバージョン競合を回避するため、リフレクションベースの実装に変更
 
 #### S3ParquetOutputPlugin.scala
 - `transaction()`メソッドで`PluginTask.dumpTask()`を使用するように変更

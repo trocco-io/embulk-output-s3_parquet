@@ -137,26 +137,28 @@ object PluginTask {
   }
 
   def dumpTask(task: PluginTask): TaskSource = {
-    // In Embulk 0.11, we need to use Exec.newTaskSource() and manually copy fields
-    // However, since Task interface is a proxy, we can use reflection or Jackson
-    import com.fasterxml.jackson.databind.ObjectMapper
-    import com.fasterxml.jackson.module.scala.DefaultScalaModule
-
-    val objectMapper = new ObjectMapper()
-    objectMapper.registerModule(DefaultScalaModule)
-
+    // Use reflection to copy all getter values to TaskSource
     val taskSource = CONFIG_MAPPER_FACTORY.newTaskSource()
-    val jsonNode =
-      objectMapper.valueToTree[com.fasterxml.jackson.databind.JsonNode](task)
-    val fields = jsonNode.fields()
 
-    while (fields.hasNext) {
-      val entry = fields.next()
-      val key = entry.getKey
-      val value = entry.getValue
+    // Get all methods from the task interface
+    val methods = task.getClass.getMethods
 
-      if (!value.isNull) {
-        taskSource.set(key, objectMapper.treeToValue(value, classOf[Object]))
+    methods.foreach { method =>
+      val methodName = method.getName
+      // Find getter methods (starts with "get" and has no parameters)
+      if (methodName.startsWith("get") && method.getParameterCount == 0 && methodName != "getClass") {
+        try {
+          val value = method.invoke(task)
+          if (value != null) {
+            // Convert getter name to property name (e.g., getBucket -> bucket)
+            val propertyName =
+              methodName.substring(3, 4).toLowerCase + methodName.substring(4)
+            taskSource.set(propertyName, value)
+          }
+        }
+        catch {
+          case _: Exception => // Ignore methods that can't be invoked
+        }
       }
     }
 
