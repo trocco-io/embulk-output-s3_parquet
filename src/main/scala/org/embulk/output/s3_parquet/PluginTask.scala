@@ -141,20 +141,34 @@ object PluginTask {
     // Use Exec.newTaskSource() to create a new TaskSource
     val taskSource = org.embulk.spi.Exec.newTaskSource()
 
-    // Get all methods with @Config annotation and copy their values
-    val taskClass = classOf[PluginTask]
-    taskClass.getMethods.foreach { method =>
-      val configAnnotation = method.getAnnotation(classOf[Config])
-      if (configAnnotation != null && method.getParameterCount == 0) {
-        val key = configAnnotation.value()
-        try {
-          val value = method.invoke(task)
-          if (value != null) {
-            taskSource.set(key, value)
+    // Get all methods with @Config annotation from PluginTask and all parent interfaces
+    // We need to collect methods from all interfaces in the hierarchy
+    val allInterfaces = scala.collection.mutable.Set[Class[_]]()
+
+    def collectInterfaces(clazz: Class[_]): Unit = {
+      if (clazz != null && clazz.isInterface) {
+        allInterfaces.add(clazz)
+        clazz.getInterfaces.foreach(collectInterfaces)
+      }
+    }
+
+    collectInterfaces(classOf[PluginTask])
+
+    // Collect all methods with @Config annotation
+    allInterfaces.foreach { iface =>
+      iface.getDeclaredMethods.foreach { method =>
+        val configAnnotation = method.getAnnotation(classOf[Config])
+        if (configAnnotation != null && method.getParameterCount == 0) {
+          val key = configAnnotation.value()
+          try {
+            val value = method.invoke(task)
+            if (value != null) {
+              taskSource.set(key, value)
+            }
           }
-        }
-        catch {
-          case _: Exception => // Ignore methods that can't be invoked
+          catch {
+            case _: Exception => // Ignore methods that can't be invoked
+          }
         }
       }
     }
