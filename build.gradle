@@ -56,7 +56,11 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
     testImplementation 'org.apache.parquet:parquet-avro:1.11.0'
     testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-avro:2.14.0'
+    testImplementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.14.0'
     testImplementation 'org.apache.hadoop:hadoop-client:2.10.2'
+    testImplementation 'joda-time:joda-time:2.10.10'
+    testImplementation 'org.msgpack:msgpack-core:0.9.3'
+    testImplementation 'org.yaml:snakeyaml:1.33'
 }
 
 spotless {

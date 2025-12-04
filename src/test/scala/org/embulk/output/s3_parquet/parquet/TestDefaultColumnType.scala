@@ -12,8 +12,9 @@ import org.embulk.spi.`type`.{
   StringType,
   TimestampType
 }
-import org.embulk.spi.json.JsonParser
-import org.embulk.spi.time.{Timestamp, TimestampFormatter}
+import org.embulk.spi.time.Timestamp
+import org.embulk.util.timestamp.TimestampFormatter
+import org.embulk.util.config.ConfigMapperFactory
 import org.scalatest.diagrams.Diagrams
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -124,7 +125,9 @@ class TestDefaultColumnType
 
   test("#consumeTimestamp") {
     val formatter = TimestampFormatter
-      .of("%Y-%m-%d %H:%M:%S.%6N %z", "UTC")
+      .builder("%Y-%m-%d %H:%M:%S.%6N %z", true)
+      .setDefaultZoneFromString("UTC")
+      .build()
     newMockRecordConsumer().tap { consumer =>
       consumer.writingSampleField {
         DefaultColumnType.consumeTimestamp(
@@ -141,11 +144,17 @@ class TestDefaultColumnType
   }
 
   test("#consumeJson") {
+    import org.embulk.output.s3_parquet.EmbulkPluginTestHelper
+
+    // Create a helper instance to use the json method
+    val helper = new EmbulkPluginTestHelper {}
+    val jsonValue = helper.json("""{"a":1,"b":"c","d":5.5,"e":true}""")
+
     newMockRecordConsumer().tap { consumer =>
       consumer.writingSampleField {
         DefaultColumnType.consumeJson(
           consumer,
-          new JsonParser().parse("""{"a":1,"b":"c","d":5.5,"e":true}""")
+          jsonValue
         )
       }
       // format: off
