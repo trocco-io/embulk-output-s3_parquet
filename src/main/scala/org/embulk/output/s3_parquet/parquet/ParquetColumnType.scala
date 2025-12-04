@@ -102,7 +102,7 @@ object ParquetColumnType {
         }
 
         def build(): ConfigSource = {
-          val c = PluginTask.getConfigMapperFactory.newConfigSource()
+          val c = PluginTask.CONFIG_MAPPER_FACTORY.newConfigSource()
           name.foreach(c.set("name", _))
           precision.foreach(c.set("precision", _))
           scale.foreach(c.set("scale", _))

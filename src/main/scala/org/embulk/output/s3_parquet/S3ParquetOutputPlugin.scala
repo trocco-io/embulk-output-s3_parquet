@@ -52,7 +52,7 @@ class S3ParquetOutputPlugin extends OutputPlugin {
       }
     }
 
-    PluginTask.getConfigMapperFactory.newConfigDiff()
+    PluginTask.CONFIG_MAPPER_FACTORY.newConfigDiff()
   }
 
   override def resume(

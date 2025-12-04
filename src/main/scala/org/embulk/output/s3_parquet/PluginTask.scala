@@ -75,7 +75,7 @@ trait PluginTask extends Task with ParquetFileWriteSupport.Task with Aws.Task {
 
 object PluginTask {
 
-  private val CONFIG_MAPPER_FACTORY: ConfigMapperFactory =
+  val CONFIG_MAPPER_FACTORY: ConfigMapperFactory =
     ConfigMapperFactory.builder().addDefaultModules().build()
 
   def loadConfig(config: ConfigSource): PluginTask = {
@@ -185,7 +185,5 @@ object PluginTask {
 
     taskSource
   }
-
-  def getConfigMapperFactory: ConfigMapperFactory = CONFIG_MAPPER_FACTORY
 
 }

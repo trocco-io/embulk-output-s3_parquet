@@ -58,7 +58,7 @@ case class S3ParquetPageOutput(
       }
     }
     cleanup()
-    PluginTask.getConfigMapperFactory
+    PluginTask.CONFIG_MAPPER_FACTORY
       .newTaskReport()
       .set("bucket", result.getBucketName)
       .set("key", result.getKey)
