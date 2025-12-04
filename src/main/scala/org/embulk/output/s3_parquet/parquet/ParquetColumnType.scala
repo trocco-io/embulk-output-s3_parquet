@@ -12,18 +12,14 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit.{
   NANOS
 }
 import org.apache.parquet.schema.PrimitiveType
-import org.embulk.config.{
-  Config,
-  ConfigDefault,
-  ConfigException,
-  ConfigSource,
-  Task => EmbulkTask
-}
+import org.embulk.util.config.{Config, ConfigDefault, Task => EmbulkTask}
+import org.embulk.config.{ConfigException, ConfigSource}
 import org.embulk.output.s3_parquet.catalog.GlueDataType
 import org.embulk.output.s3_parquet.implicits
-import org.embulk.spi.{Column, DataException, Exec}
-import org.embulk.spi.time.{Timestamp, TimestampFormatter}
-import org.embulk.spi.time.TimestampFormatter.TimestampColumnOption
+import org.embulk.spi.{Column, DataException}
+import org.embulk.spi.time.Timestamp
+import org.embulk.output.s3_parquet.PluginTask
+import org.embulk.util.timestamp.TimestampFormatter
 import org.msgpack.value.Value
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -37,10 +33,18 @@ object ParquetColumnType {
   private val logger: Logger =
     LoggerFactory.getLogger(classOf[ParquetColumnType])
 
-  trait Task extends EmbulkTask with TimestampColumnOption {
+  trait Task extends EmbulkTask {
     @Config("logical_type")
     @ConfigDefault("null")
     def getLogicalType: Optional[LogicalTypeOption]
+
+    @Config("format")
+    @ConfigDefault("null")
+    def getFormat: Optional[String]
+
+    @Config("timezone")
+    @ConfigDefault("null")
+    def getTimeZoneId: Optional[String]
   }
 
   trait LogicalTypeOption extends EmbulkTask {
@@ -98,7 +102,7 @@ object ParquetColumnType {
         }
 
         def build(): ConfigSource = {
-          val c = Exec.newConfigSource()
+          val c = PluginTask.CONFIG_MAPPER_FACTORY.newConfigSource()
           name.foreach(c.set("name", _))
           precision.foreach(c.set("precision", _))
           scale.foreach(c.set("scale", _))

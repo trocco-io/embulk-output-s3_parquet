@@ -10,26 +10,20 @@ import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.hadoop.ParquetWriter
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.MessageType
-import org.embulk.config.{
-  Config,
-  ConfigDefault,
-  ConfigException,
-  ConfigSource,
-  Task => EmbulkTask
-}
+import org.embulk.util.config.{Config, ConfigDefault, Task => EmbulkTask}
+import org.embulk.config.{ConfigException, ConfigSource}
 import org.embulk.output.s3_parquet.implicits
 import org.embulk.output.s3_parquet.parquet.ParquetFileWriteSupport.WriterBuilder
 import org.embulk.spi.{Column, ColumnVisitor, PageReader, Schema}
 import org.embulk.spi.`type`.{TimestampType, Type, Types}
-import org.embulk.spi.time.TimestampFormatter
-import org.embulk.spi.util.Timestamps
+import org.embulk.util.timestamp.TimestampFormatter
 import org.slf4j.Logger
 
 object ParquetFileWriteSupport {
 
   import implicits._
 
-  trait Task extends TimestampFormatter.Task with EmbulkTask {
+  trait Task extends EmbulkTask {
     @Config("column_options")
     @ConfigDefault("{}")
     def getRawColumnOptions: JMap[String, ConfigSource]
@@ -115,8 +109,20 @@ object ParquetFileWriteSupport {
           .flatMap(ParquetColumnType.fromTask)
           .getOrElse(DefaultColumnType)
     }.toMap
-    val timestampFormatters: Seq[TimestampFormatter] = Timestamps
-      .newTimestampColumnFormatters(task, schema, task.getColumnOptions)
+    val timestampFormatters: Seq[TimestampFormatter] = schema.getColumns.map {
+      c: Column =>
+        val columnOption = task.getColumnOptions.toMap.get(c.getName)
+        val format = columnOption
+          .flatMap(opt => Optional2Option(opt.getFormat))
+          .getOrElse("%Y-%m-%d %H:%M:%S.%N %z")
+        val timezone = columnOption
+          .flatMap(opt => Optional2Option(opt.getTimeZoneId))
+          .getOrElse("UTC")
+        TimestampFormatter
+          .builder(format, true)
+          .setDefaultZoneFromString(timezone)
+          .build()
+    }
     new ParquetFileWriteSupport(schema, parquetSchema, timestampFormatters)
   }
 }

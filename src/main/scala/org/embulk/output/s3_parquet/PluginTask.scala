@@ -4,14 +4,15 @@ import java.util.{Locale, MissingFormatArgumentException, Optional}
 
 import com.amazonaws.services.s3.model.CannedAccessControlList
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.embulk.config.{
+import org.embulk.util.config.{
   Config,
   ConfigDefault,
-  ConfigException,
-  ConfigSource,
+  ConfigMapper,
+  ConfigMapperFactory,
   Task,
-  TaskSource
+  TaskMapper
 }
+import org.embulk.config.{ConfigException, ConfigSource, DataSource, TaskSource}
 import org.embulk.output.s3_parquet.aws.Aws
 import org.embulk.output.s3_parquet.catalog.CatalogRegistrator
 import org.embulk.output.s3_parquet.parquet.ParquetFileWriteSupport
@@ -74,8 +75,12 @@ trait PluginTask extends Task with ParquetFileWriteSupport.Task with Aws.Task {
 
 object PluginTask {
 
+  val CONFIG_MAPPER_FACTORY: ConfigMapperFactory =
+    ConfigMapperFactory.builder().addDefaultModules().build()
+
   def loadConfig(config: ConfigSource): PluginTask = {
-    val task = config.loadConfig(classOf[PluginTask])
+    val configMapper: ConfigMapper = CONFIG_MAPPER_FACTORY.createConfigMapper()
+    val task = configMapper.map(config, classOf[PluginTask])
     // sequence_format
     try task.getSequenceFormat.format(0, 0)
     catch {
@@ -126,7 +131,9 @@ object PluginTask {
     task
   }
 
-  def loadTask(taskSource: TaskSource): PluginTask =
-    taskSource.loadTask(classOf[PluginTask])
+  def loadTask(taskSource: TaskSource): PluginTask = {
+    val taskMapper: TaskMapper = CONFIG_MAPPER_FACTORY.createTaskMapper()
+    taskMapper.map(taskSource, classOf[PluginTask])
+  }
 
 }

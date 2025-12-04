@@ -13,7 +13,8 @@ import org.embulk.spi.`type`.{
   StringType,
   TimestampType
 }
-import org.embulk.spi.time.{Timestamp, TimestampFormatter}
+import org.embulk.spi.time.Timestamp
+import org.embulk.util.timestamp.TimestampFormatter
 import org.msgpack.value.{Value, ValueFactory}
 import org.slf4j.{Logger, LoggerFactory}
 

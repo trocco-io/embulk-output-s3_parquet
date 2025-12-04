@@ -19,9 +19,10 @@ import com.amazonaws.auth.profile.{
   ProfileCredentialsProvider,
   ProfilesConfigFile
 }
-import org.embulk.config.{Config, ConfigDefault, ConfigException}
+import org.embulk.util.config.{Config, ConfigDefault}
+import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.aws.AwsCredentials.Task
-import org.embulk.spi.unit.LocalFile
+import java.io.File
 
 object AwsCredentials {
 
@@ -45,7 +46,7 @@ object AwsCredentials {
 
     @Config("profile_file")
     @ConfigDefault("null")
-    def getProfileFile: Optional[LocalFile]
+    def getProfileFile: Optional[String]
 
     @Config("profile_name")
     @ConfigDefault("\"default\"")
@@ -103,7 +104,7 @@ class AwsCredentials(task: Task) {
       case "profile" =>
         if (task.getProfileFile.isPresent) {
           val pf: ProfilesConfigFile = new ProfilesConfigFile(
-            task.getProfileFile.get().getFile
+            new File(task.getProfileFile.get())
           )
           new ProfileCredentialsProvider(pf, task.getProfileName)
         }
