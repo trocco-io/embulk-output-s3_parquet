@@ -39,6 +39,10 @@ object ParquetFileWriteSupport {
 
     def getTypeOptions: JMap[String, ParquetColumnType.Task]
     def setTypeOptions(typeOptions: JMap[String, ParquetColumnType.Task]): Unit
+
+    @Config("default_timezone")
+    @ConfigDefault("\"UTC\"")
+    def getDefaultTimeZone: String
   }
 
   case class WriterBuilder(path: Path, writeSupport: ParquetFileWriteSupport)
@@ -114,10 +118,10 @@ object ParquetFileWriteSupport {
         val columnOption = task.getColumnOptions.toMap.get(c.getName)
         val format = columnOption
           .flatMap(opt => Optional2Option(opt.getFormat))
-          .getOrElse("%Y-%m-%d %H:%M:%S.%N %z")
+          .getOrElse("%Y-%m-%d %H:%M:%S.%6N %z")
         val timezone = columnOption
           .flatMap(opt => Optional2Option(opt.getTimeZoneId))
-          .getOrElse("UTC")
+          .getOrElse(task.getDefaultTimeZone)
         TimestampFormatter
           .builder(format, true)
           .setDefaultZoneFromString(timezone)

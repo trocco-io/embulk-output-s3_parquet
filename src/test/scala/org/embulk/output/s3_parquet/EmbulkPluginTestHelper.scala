@@ -18,12 +18,22 @@ import org.apache.parquet.avro.AvroReadSupport
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetReader}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
-import org.embulk.config.ConfigSource
+import org.embulk.config.{ConfigLoader, ConfigSource, TaskReport, TaskSource}
+import org.embulk.exec.PooledBufferAllocator
 import org.embulk.spi.Schema
-import org.embulk.util.config.ConfigMapperFactory
-import org.msgpack.value.{Value, ValueFactory}
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import org.embulk.spi.{OutputPlugin, PageBuilder}
+import org.embulk.spi.`type`.{
+  BooleanType,
+  DoubleType,
+  JsonType,
+  LongType,
+  StringType,
+  TimestampType
+}
+import org.embulk.spi.time.Timestamp
+import org.embulk.config.ModelManager
+import org.embulk.spi.json.JsonValue
+import org.msgpack.value.Value
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.diagrams.Diagrams
@@ -43,6 +53,11 @@ abstract class EmbulkPluginTestHelper
   val TEST_S3_SECRET_ACCESS_KEY: String = "test"
   val TEST_BUCKET_NAME: String = "my-bucket"
   val TEST_PATH_PREFIX: String = "path/to/parquet-"
+
+  private val bufferAllocator: PooledBufferAllocator =
+    PooledBufferAllocator.create()
+  private val modelManager = new ModelManager()
+  private val configLoader = new ConfigLoader(modelManager)
 
   before {
     withLocalStackS3Client(_.createBucket(TEST_BUCKET_NAME))
@@ -69,9 +84,33 @@ abstract class EmbulkPluginTestHelper
       data: Seq[Seq[Any]],
       messageTypeTest: MessageType => Unit = { _ => }
   ): Seq[Seq[AnyRef]] = {
-    // TODO: Implement test execution using Embulk v0.11 testing framework
-    // For now, return empty result to allow compilation
-    Seq.empty
+    val plugin: OutputPlugin = new S3ParquetOutputPlugin()
+
+    plugin.transaction(
+      outConfig,
+      schema,
+      1,
+      (taskSource: TaskSource) => {
+        val output = plugin.open(taskSource, schema, 0)
+        val builder = new PageBuilder(bufferAllocator, schema, output)
+        try {
+          data.foreach(writeRecord(builder, schema, _))
+          builder.finish()
+          val taskReport: TaskReport = output.commit()
+          Seq(taskReport).asJava
+        }
+        catch {
+          case ex: Throwable =>
+            output.abort()
+            throw ex
+        }
+        finally {
+          builder.close()
+        }
+      }
+    )
+
+    readS3Parquet(TEST_BUCKET_NAME, TEST_PATH_PREFIX, messageTypeTest)
   }
 
   private def withLocalStackS3Client[A](f: AmazonS3 => A): A = {
@@ -157,42 +196,7 @@ abstract class EmbulkPluginTestHelper
   }
 
   def loadConfigSourceFromYamlString(yaml: String): ConfigSource = {
-    val yamlMapper = new ObjectMapper(new YAMLFactory())
-    val tree = yamlMapper
-      .readTree(yaml)
-      .asInstanceOf[com.fasterxml.jackson.databind.node.ObjectNode]
-    val mapper = ConfigMapperFactory.withDefault()
-
-    // Build ConfigSource by setting each field individually
-    var configSource = mapper.newConfigSource()
-    val fields = tree.fields()
-    while (fields.hasNext) {
-      val entry = fields.next()
-      val key = entry.getKey
-      val value = entry.getValue
-
-      // Convert JsonNode to appropriate type
-      if (value.isTextual) {
-        configSource = configSource.set(key, value.asText())
-      }
-      else if (value.isBoolean) {
-        configSource = configSource.set(key, Boolean.box(value.asBoolean()))
-      }
-      else if (value.isInt) {
-        configSource = configSource.set(key, Int.box(value.asInt()))
-      }
-      else if (value.isLong) {
-        configSource = configSource.set(key, Long.box(value.asLong()))
-      }
-      else if (value.isDouble) {
-        configSource = configSource.set(key, Double.box(value.asDouble()))
-      }
-      else {
-        configSource = configSource.set(key, value)
-      }
-    }
-
-    configSource
+    configLoader.fromYamlString(yaml)
   }
 
   def newDefaultConfig: ConfigSource =
@@ -209,6 +213,69 @@ abstract class EmbulkPluginTestHelper
          |default_timezone: Asia/Tokyo
          |""".stripMargin
     )
+
+  private def writeRecord(
+      builder: PageBuilder,
+      schema: Schema,
+      values: Seq[Any]
+  ): Unit = {
+    schema.getColumns.asScala.zipWithIndex.foreach {
+      case (column, index) =>
+        val value = if (index < values.size) values(index) else null
+        if (value == null) builder.setNull(column)
+        else
+          column.getType match {
+            case _: BooleanType =>
+              builder.setBoolean(column, value.asInstanceOf[Boolean])
+            case _: LongType =>
+              val longValue = value match {
+                case v: Byte  => v.toLong
+                case v: Short => v.toLong
+                case v: Int   => v.toLong
+                case v: Long  => v
+                case other =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported value for column ${column.getName}: ${other.getClass}"
+                  )
+              }
+              builder.setLong(column, longValue)
+            case _: DoubleType =>
+              val doubleValue = value match {
+                case v: Float  => v.toDouble
+                case v: Double => v
+                case v: Int    => v.toDouble
+                case v: Long   => v.toDouble
+                case other =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported value for column ${column.getName}: ${other.getClass}"
+                  )
+              }
+              builder.setDouble(column, doubleValue)
+            case _: StringType =>
+              builder.setString(column, value.toString)
+            case _: TimestampType =>
+              value match {
+                case ts: Timestamp => builder.setTimestamp(column, ts)
+                case inst: java.time.Instant =>
+                  builder.setTimestamp(column, inst)
+                case other =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported timestamp for column ${column.getName}: ${other.getClass}"
+                  )
+              }
+            case _: JsonType =>
+              value match {
+                case v: Value     => builder.setJson(column, v)
+                case v: JsonValue => builder.setJson(column, v)
+                case other =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported json value for column ${column.getName}: ${other.getClass}"
+                  )
+              }
+          }
+    }
+    builder.addRecord()
+  }
 
   def json(str: String): Value = {
     import org.msgpack.core.MessagePack

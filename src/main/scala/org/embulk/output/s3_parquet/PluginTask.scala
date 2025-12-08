@@ -71,6 +71,10 @@ trait PluginTask extends Task with ParquetFileWriteSupport.Task with Aws.Task {
   @Config("catalog")
   @ConfigDefault("null")
   def getCatalog: Optional[CatalogRegistrator.Task]
+
+  @Config("default_timezone")
+  @ConfigDefault("\"UTC\"")
+  def getDefaultTimeZone: String
 }
 
 object PluginTask {

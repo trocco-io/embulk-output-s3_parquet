@@ -12,7 +12,12 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit.{
   NANOS
 }
 import org.apache.parquet.schema.PrimitiveType
-import org.embulk.util.config.{Config, ConfigDefault, Task => EmbulkTask}
+import org.embulk.util.config.{
+  Config,
+  ConfigDefault,
+  Task => EmbulkTask,
+  ConfigMapper
+}
 import org.embulk.config.{ConfigException, ConfigSource}
 import org.embulk.output.s3_parquet.catalog.GlueDataType
 import org.embulk.output.s3_parquet.implicits
@@ -171,7 +176,9 @@ object ParquetColumnType {
           )
       }
     }
-    c.loadConfig(classOf[Task])
+    val mapper: ConfigMapper =
+      PluginTask.CONFIG_MAPPER_FACTORY.createConfigMapper()
+    mapper.map(c, classOf[Task])
   }
 
   private def translateConvertedType2LogicalType(

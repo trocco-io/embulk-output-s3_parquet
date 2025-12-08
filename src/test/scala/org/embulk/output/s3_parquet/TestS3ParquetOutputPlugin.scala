@@ -12,8 +12,7 @@ import scala.util.chaining._
 
 class TestS3ParquetOutputPlugin extends EmbulkPluginTestHelper {
 
-  // TODO: Implement runOutput for Embulk v0.11
-  ignore("minimal default case") {
+  test("minimal default case") {
     val schema: Schema = Schema
       .builder()
       .add("c0", Types.BOOLEAN)
@@ -88,8 +87,7 @@ class TestS3ParquetOutputPlugin extends EmbulkPluginTestHelper {
     }
   }
 
-  // TODO: Implement runOutput for Embulk v0.11
-  ignore("timestamp-millis") {
+  test("timestamp-millis") {
     val schema = Schema.builder().add("c0", Types.TIMESTAMP).build()
     val data: Seq[Seq[Timestamp]] = Seq(
       Seq(Timestamp.ofEpochMilli(111_111_111L)),
@@ -124,8 +122,7 @@ class TestS3ParquetOutputPlugin extends EmbulkPluginTestHelper {
     }
   }
 
-  // TODO: Implement runOutput for Embulk v0.11
-  ignore("timestamp-micros") {
+  test("timestamp-micros") {
     val schema = Schema.builder().add("c0", Types.TIMESTAMP).build()
     val data: Seq[Seq[Timestamp]] = Seq(
       Seq(Timestamp.ofEpochSecond(111_111_111L, 111_111_000L)),
@@ -162,8 +159,7 @@ class TestS3ParquetOutputPlugin extends EmbulkPluginTestHelper {
     }
   }
 
-  // TODO: Implement runOutput for Embulk v0.11
-  ignore("timestamp-nanos") {
+  test("timestamp-nanos") {
     val schema = Schema.builder().add("c0", Types.TIMESTAMP).build()
     val data: Seq[Seq[Timestamp]] = Seq(
       Seq(Timestamp.ofEpochSecond(111_111_111L, 111_111_000L)),
