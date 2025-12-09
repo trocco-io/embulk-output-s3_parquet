@@ -277,55 +277,5 @@ abstract class EmbulkPluginTestHelper
     builder.addRecord()
   }
 
-  def json(str: String): Value = {
-    import org.msgpack.core.MessagePack
-    import java.io.ByteArrayOutputStream
-
-    val objectMapper = new com.fasterxml.jackson.databind.ObjectMapper()
-    val jsonNode = objectMapper.readTree(str)
-
-    // Convert JSON to MessagePack format
-    val out = new ByteArrayOutputStream()
-    val packer = MessagePack.newDefaultPacker(out)
-
-    def packJsonNode(node: com.fasterxml.jackson.databind.JsonNode): Unit = {
-      if (node.isObject) {
-        val fields = node.fields()
-        packer.packMapHeader(node.size())
-        while (fields.hasNext) {
-          val entry = fields.next()
-          packer.packString(entry.getKey)
-          packJsonNode(entry.getValue)
-        }
-      }
-      else if (node.isArray) {
-        packer.packArrayHeader(node.size())
-        node.elements().asScala.foreach(packJsonNode)
-      }
-      else if (node.isTextual) {
-        packer.packString(node.asText())
-      }
-      else if (node.isNumber) {
-        if (node.isIntegralNumber) {
-          packer.packLong(node.asLong())
-        }
-        else {
-          packer.packDouble(node.asDouble())
-        }
-      }
-      else if (node.isBoolean) {
-        packer.packBoolean(node.asBoolean())
-      }
-      else if (node.isNull) {
-        packer.packNil()
-      }
-    }
-
-    packJsonNode(jsonNode)
-    packer.close()
-
-    // Unpack to Value
-    val unpacker = MessagePack.newDefaultUnpacker(out.toByteArray)
-    unpacker.unpackValue()
-  }
+  def json(str: String): Value = new JsonParser().parse(str)
 }
