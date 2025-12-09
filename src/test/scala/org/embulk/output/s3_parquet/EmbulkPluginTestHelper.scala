@@ -54,11 +54,6 @@ abstract class EmbulkPluginTestHelper
   val TEST_BUCKET_NAME: String = "my-bucket"
   val TEST_PATH_PREFIX: String = "path/to/parquet-"
 
-  private val bufferAllocator: PooledBufferAllocator =
-    PooledBufferAllocator.create()
-  private val modelManager = new ModelManager()
-  private val configLoader = new ConfigLoader(modelManager)
-
   before {
     withLocalStackS3Client(_.createBucket(TEST_BUCKET_NAME))
   }
@@ -67,7 +62,7 @@ abstract class EmbulkPluginTestHelper
     withLocalStackS3Client { cli =>
       @scala.annotation.tailrec
       def rmRecursive(listing: ObjectListing): Unit = {
-        listing.getObjectSummaries.asScala.foreach(o =>
+        listing.getObjectSummaries.foreach(o =>
           cli.deleteObject(TEST_BUCKET_NAME, o.getKey)
         )
         if (listing.isTruncated)
@@ -92,12 +87,12 @@ abstract class EmbulkPluginTestHelper
       1,
       (taskSource: TaskSource) => {
         val output = plugin.open(taskSource, schema, 0)
-        val builder = new PageBuilder(bufferAllocator, schema, output)
+        val builder =
+          new PageBuilder(PooledBufferAllocator.create(), schema, output)
         try {
           data.foreach(writeRecord(builder, schema, _))
           builder.finish()
-          val taskReport: TaskReport = output.commit()
-          Seq(taskReport).asJava
+          output.commit()
         }
         catch {
           case ex: Throwable =>
@@ -107,6 +102,7 @@ abstract class EmbulkPluginTestHelper
         finally {
           builder.close()
         }
+        Seq.empty
       }
     )
 
@@ -196,13 +192,12 @@ abstract class EmbulkPluginTestHelper
   }
 
   def loadConfigSourceFromYamlString(yaml: String): ConfigSource = {
-    configLoader.fromYamlString(yaml)
+    new ConfigLoader(new ModelManager()).fromYamlString(yaml)
   }
 
   def newDefaultConfig: ConfigSource =
     loadConfigSourceFromYamlString(
       s"""
-         |type: s3_parquet
          |endpoint: $TEST_S3_ENDPOINT
          |bucket: $TEST_BUCKET_NAME
          |path_prefix: $TEST_PATH_PREFIX
