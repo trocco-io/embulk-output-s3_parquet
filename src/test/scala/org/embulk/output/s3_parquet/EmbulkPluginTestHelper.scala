@@ -20,23 +20,7 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetReader}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 import org.embulk.config.{ConfigLoader, ConfigSource, TaskSource}
-import org.embulk.spi.{
-  ExecAction,
-  ExecInternal,
-  ExecSessionInternal,
-  PageBuilder,
-  Schema
-}
-import org.embulk.spi.`type`.{
-  BooleanType,
-  DoubleType,
-  JsonType,
-  LongType,
-  StringType,
-  TimestampType
-}
-import org.embulk.spi.time.Timestamp
-import org.embulk.spi.json.JsonValue
+import org.embulk.spi.{ExecAction, ExecInternal, ExecSessionInternal, Schema}
 import org.embulk.test.{EmbulkTestRuntime, PageTestUtils}
 import org.msgpack.value.Value
 import org.scalatest.funsuite.AnyFunSuite
@@ -54,7 +38,7 @@ abstract class EmbulkPluginTestHelper
 
   protected val runtime: EmbulkTestRuntime = new EmbulkTestRuntime()
 
-  protected def exec: ExecSessionInternal = runtime.getExec
+  private def exec: ExecSessionInternal = runtime.getExec
 
   val TEST_S3_ENDPOINT: String = "http://localhost:4566"
   val TEST_S3_REGION: String = "us-east-1"
@@ -68,6 +52,8 @@ abstract class EmbulkPluginTestHelper
   }
 
   after {
+    exec.cleanup()
+
     withLocalStackS3Client { cli =>
       @scala.annotation.tailrec
       def rmRecursive(listing: ObjectListing): Unit = {
@@ -80,7 +66,6 @@ abstract class EmbulkPluginTestHelper
       rmRecursive(cli.listObjects(TEST_BUCKET_NAME))
     }
     withLocalStackS3Client(_.deleteBucket(TEST_BUCKET_NAME))
-    exec.cleanup()
   }
 
   def execDoWith[A](f: => A): A =
@@ -208,9 +193,7 @@ abstract class EmbulkPluginTestHelper
     Iterator
       .continually(reader.read())
       .takeWhile(_ != null)
-      .map(record =>
-        record.getSchema.getFields.asScala.map(f => record.get(f.name())).toSeq
-      )
+      .map(record => record.getSchema.getFields.map(f => record.get(f.name())))
       .toSeq
   }
 
@@ -231,69 +214,6 @@ abstract class EmbulkPluginTestHelper
          |default_timezone: Asia/Tokyo
          |""".stripMargin
     )
-
-  private def writeRecord(
-      builder: PageBuilder,
-      schema: Schema,
-      values: Seq[Any]
-  ): Unit = {
-    schema.getColumns.asScala.zipWithIndex.foreach {
-      case (column, index) =>
-        val value = if (index < values.size) values(index) else null
-        if (value == null) builder.setNull(column)
-        else
-          column.getType match {
-            case _: BooleanType =>
-              builder.setBoolean(column, value.asInstanceOf[Boolean])
-            case _: LongType =>
-              val longValue = value match {
-                case v: Byte  => v.toLong
-                case v: Short => v.toLong
-                case v: Int   => v.toLong
-                case v: Long  => v
-                case other =>
-                  throw new IllegalArgumentException(
-                    s"Unsupported value for column ${column.getName}: ${other.getClass}"
-                  )
-              }
-              builder.setLong(column, longValue)
-            case _: DoubleType =>
-              val doubleValue = value match {
-                case v: Float  => v.toDouble
-                case v: Double => v
-                case v: Int    => v.toDouble
-                case v: Long   => v.toDouble
-                case other =>
-                  throw new IllegalArgumentException(
-                    s"Unsupported value for column ${column.getName}: ${other.getClass}"
-                  )
-              }
-              builder.setDouble(column, doubleValue)
-            case _: StringType =>
-              builder.setString(column, value.toString)
-            case _: TimestampType =>
-              value match {
-                case ts: Timestamp => builder.setTimestamp(column, ts)
-                case inst: java.time.Instant =>
-                  builder.setTimestamp(column, inst)
-                case other =>
-                  throw new IllegalArgumentException(
-                    s"Unsupported timestamp for column ${column.getName}: ${other.getClass}"
-                  )
-              }
-            case _: JsonType =>
-              value match {
-                case v: Value     => builder.setJson(column, v)
-                case v: JsonValue => builder.setJson(column, v)
-                case other =>
-                  throw new IllegalArgumentException(
-                    s"Unsupported json value for column ${column.getName}: ${other.getClass}"
-                  )
-              }
-          }
-    }
-    builder.addRecord()
-  }
 
   def json(str: String): Value = new JsonParser().parse(str)
 }
