@@ -2,6 +2,7 @@ package org.embulk.output.s3_parquet
 
 import java.io.File
 import java.nio.file.{Files, Path}
+import java.util.concurrent.ExecutionException
 
 import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
@@ -18,10 +19,14 @@ import org.apache.parquet.avro.AvroReadSupport
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetReader}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
-import org.embulk.config.{ConfigLoader, ConfigSource, TaskReport, TaskSource}
-import org.embulk.exec.PooledBufferAllocator
-import org.embulk.spi.Schema
-import org.embulk.spi.{OutputPlugin, PageBuilder}
+import org.embulk.config.{ConfigLoader, ConfigSource, TaskSource}
+import org.embulk.spi.{
+  ExecAction,
+  ExecInternal,
+  ExecSessionInternal,
+  PageBuilder,
+  Schema
+}
 import org.embulk.spi.`type`.{
   BooleanType,
   DoubleType,
@@ -31,8 +36,8 @@ import org.embulk.spi.`type`.{
   TimestampType
 }
 import org.embulk.spi.time.Timestamp
-import org.embulk.config.ModelManager
 import org.embulk.spi.json.JsonValue
+import org.embulk.test.{EmbulkTestRuntime, PageTestUtils}
 import org.msgpack.value.Value
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfter
@@ -46,6 +51,10 @@ abstract class EmbulkPluginTestHelper
     with BeforeAndAfter
     with Diagrams {
   import implicits._
+
+  protected val runtime: EmbulkTestRuntime = new EmbulkTestRuntime()
+
+  protected def exec: ExecSessionInternal = runtime.getExec
 
   val TEST_S3_ENDPOINT: String = "http://localhost:4566"
   val TEST_S3_REGION: String = "us-east-1"
@@ -71,7 +80,19 @@ abstract class EmbulkPluginTestHelper
       rmRecursive(cli.listObjects(TEST_BUCKET_NAME))
     }
     withLocalStackS3Client(_.deleteBucket(TEST_BUCKET_NAME))
+    exec.cleanup()
   }
+
+  def execDoWith[A](f: => A): A =
+    try ExecInternal.doWith(
+      exec,
+      new ExecAction[A] {
+        override def run(): A = f
+      }
+    )
+    catch {
+      case ex: ExecutionException => throw ex.getCause
+    }
 
   def runOutput(
       outConfig: ConfigSource,
@@ -79,32 +100,34 @@ abstract class EmbulkPluginTestHelper
       data: Seq[Seq[Any]],
       messageTypeTest: MessageType => Unit = { _ => }
   ): Seq[Seq[AnyRef]] = {
-    val plugin: OutputPlugin = new S3ParquetOutputPlugin()
-
-    plugin.transaction(
-      outConfig,
-      schema,
-      1,
-      (taskSource: TaskSource) => {
-        val output = plugin.open(taskSource, schema, 0)
-        val builder =
-          new PageBuilder(PooledBufferAllocator.create(), schema, output)
-        try {
-          data.foreach(writeRecord(builder, schema, _))
-          builder.finish()
-          output.commit()
+    execDoWith {
+      val plugin = new S3ParquetOutputPlugin()
+      plugin.transaction(
+        outConfig,
+        schema,
+        1,
+        (taskSource: TaskSource) => {
+          Using.resource(plugin.open(taskSource, schema, 0)) { output =>
+            try {
+              PageTestUtils
+                .buildPage(
+                  exec.getBufferAllocator,
+                  schema,
+                  data.flatten: _*
+                )
+                .foreach(output.add)
+              output.commit()
+            }
+            catch {
+              case ex: Throwable =>
+                output.abort()
+                throw ex
+            }
+          }
+          Seq.empty
         }
-        catch {
-          case ex: Throwable =>
-            output.abort()
-            throw ex
-        }
-        finally {
-          builder.close()
-        }
-        Seq.empty
-      }
-    )
+      )
+    }
 
     readS3Parquet(TEST_BUCKET_NAME, TEST_PATH_PREFIX, messageTypeTest)
   }
@@ -192,7 +215,7 @@ abstract class EmbulkPluginTestHelper
   }
 
   def loadConfigSourceFromYamlString(yaml: String): ConfigSource = {
-    new ConfigLoader(new ModelManager()).fromYamlString(yaml)
+    new ConfigLoader(runtime.getModelManager).fromYamlString(yaml)
   }
 
   def newDefaultConfig: ConfigSource =
