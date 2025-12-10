@@ -176,9 +176,9 @@ object ParquetColumnType {
           )
       }
     }
-    val mapper: ConfigMapper =
+    val configMapper: ConfigMapper =
       PluginTask.CONFIG_MAPPER_FACTORY.createConfigMapper()
-    mapper.map(c, classOf[Task])
+    configMapper.map(c, classOf[Task])
   }
 
   private def translateConvertedType2LogicalType(
