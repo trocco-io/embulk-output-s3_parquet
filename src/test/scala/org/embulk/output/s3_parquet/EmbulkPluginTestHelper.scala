@@ -209,7 +209,10 @@ abstract class EmbulkPluginTestHelper
     def listFiles(file: File): Seq[File] = {
       file
         .listFiles()
-        .flatMap(f => if (f.isFile) Seq(f) else listFiles(f))
+        .flatMap(f =>
+          if (f.isFile) Seq(f)
+          else listFiles(f)
+        )
         .toSeq
     }
 
