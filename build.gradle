@@ -30,6 +30,7 @@ dependencies {
     implementation 'software.amazon.awssdk:sts'
     implementation 'software.amazon.awssdk:s3-transfer-manager'
     implementation 'software.amazon.awssdk:apache-client'
+    implementation 'software.amazon.awssdk.crt:aws-crt:0.21.0'
     ['column', 'common', 'encoding', 'hadoop', 'jackson'].each { v ->
         implementation("org.apache.parquet:parquet-${v}:1.11.0") {
             exclude group: 'org.slf4j', module: 'slf4j-api'
