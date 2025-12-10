@@ -8,7 +8,7 @@ import com.amazonaws.services.s3.transfer.model.UploadResult
 import org.apache.parquet.hadoop.ParquetWriter
 import org.embulk.config.TaskReport
 import org.embulk.output.s3_parquet.aws.Aws
-import org.embulk.spi.{Exec, Page, PageReader, TransactionalPageOutput}
+import org.embulk.spi.{Page, PageReader, TransactionalPageOutput}
 
 case class S3ParquetPageOutput(
     outputLocalFile: String,
@@ -58,7 +58,7 @@ case class S3ParquetPageOutput(
       }
     }
     cleanup()
-    Exec
+    PluginTask.CONFIG_MAPPER_FACTORY
       .newTaskReport()
       .set("bucket", result.getBucketName)
       .set("key", result.getKey)

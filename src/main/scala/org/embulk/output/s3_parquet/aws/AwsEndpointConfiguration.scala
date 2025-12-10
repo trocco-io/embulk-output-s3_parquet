@@ -5,7 +5,7 @@ import java.util.Optional
 import com.amazonaws.client.builder.AwsClientBuilder
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.regions.{DefaultAwsRegionProviderChain, Regions}
-import org.embulk.config.{Config, ConfigDefault}
+import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.output.s3_parquet.aws.AwsEndpointConfiguration.Task
 
 import scala.util.Try

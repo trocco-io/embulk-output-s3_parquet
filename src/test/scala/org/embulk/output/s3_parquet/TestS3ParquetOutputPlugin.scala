@@ -4,7 +4,8 @@ import org.apache.parquet.schema.LogicalTypeAnnotation
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.embulk.spi.Schema
 import org.embulk.spi.`type`.Types
-import org.embulk.spi.time.{Timestamp, TimestampFormatter, TimestampParser}
+import org.embulk.spi.time.Timestamp
+import org.embulk.util.timestamp.TimestampFormatter
 import org.msgpack.value.Value
 
 import scala.util.chaining._
@@ -62,10 +63,14 @@ class TestS3ParquetOutputPlugin extends EmbulkPluginTestHelper {
       data(i).indices.foreach { j =>
         data(i)(j) match {
           case timestamp: Timestamp =>
-            val formatter =
-              TimestampFormatter.of("%Y-%m-%d %H:%M:%S.%6N %z", "Asia/Tokyo")
+            val formatter = TimestampFormatter
+              .builder("%Y-%m-%d %H:%M:%S.%6N %z", true)
+              .setDefaultZoneFromString("Asia/Tokyo")
+              .build()
+            val instant = java.time.Instant
+              .ofEpochSecond(timestamp.getEpochSecond, timestamp.getNano)
             assert(
-              formatter.format(timestamp) == result(i)(j),
+              formatter.format(instant) == result(i)(j),
               s"A different timestamp value is found (Record Index: $i, Column Index: $j)"
             )
           case value: Value =>

@@ -16,7 +16,8 @@ import org.embulk.spi.`type`.{
   StringType,
   TimestampType
 }
-import org.embulk.spi.time.{Timestamp, TimestampFormatter}
+import org.embulk.spi.time.Timestamp
+import org.embulk.util.timestamp.TimestampFormatter
 import org.msgpack.value.Value
 
 import scala.math.BigDecimal.RoundingMode

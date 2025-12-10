@@ -33,7 +33,7 @@ class S3ParquetOutputPlugin extends OutputPlugin {
     val task: PluginTask = PluginTask.loadConfig(config)
     val support: ParquetFileWriteSupport = ParquetFileWriteSupport(task, schema)
     support.showOutputSchema(logger)
-    control.run(task.dump)
+    control.run(task.toTaskSource)
 
     task.getCatalog.ifPresent { catalog =>
       val location =
@@ -52,7 +52,7 @@ class S3ParquetOutputPlugin extends OutputPlugin {
       }
     }
 
-    Exec.newConfigDiff
+    PluginTask.CONFIG_MAPPER_FACTORY.newConfigDiff()
   }
 
   override def resume(

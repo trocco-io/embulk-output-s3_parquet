@@ -19,9 +19,10 @@ import com.amazonaws.auth.profile.{
   ProfileCredentialsProvider,
   ProfilesConfigFile
 }
-import org.embulk.config.{Config, ConfigDefault, ConfigException}
+import org.embulk.util.config.{Config, ConfigDefault}
+import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.aws.AwsCredentials.Task
-import org.embulk.spi.unit.LocalFile
+import org.embulk.util.config.units.LocalFile
 
 object AwsCredentials {
 

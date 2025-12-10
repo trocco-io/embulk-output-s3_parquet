@@ -12,7 +12,6 @@ import com.amazonaws.services.s3.transfer.{
   TransferManager,
   TransferManagerBuilder
 }
-import com.google.inject.{Binder, Guice, Module, Stage}
 import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path => HadoopPath}
@@ -20,66 +19,16 @@ import org.apache.parquet.avro.AvroReadSupport
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetReader}
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
-import org.embulk.{TestPluginSourceModule, TestUtilityModule}
-import org.embulk.config.{
-  ConfigLoader,
-  ConfigSource,
-  DataSourceImpl,
-  ModelManager,
-  TaskSource
-}
-import org.embulk.exec.{
-  ExecModule,
-  ExtensionServiceLoaderModule,
-  SystemConfigModule
-}
-import org.embulk.jruby.JRubyScriptingModule
-import org.embulk.plugin.{
-  BuiltinPluginSourceModule,
-  InjectedPluginSource,
-  PluginClassLoaderModule
-}
-import org.embulk.spi.{Exec, ExecSession, OutputPlugin, PageTestUtils, Schema}
-import org.embulk.spi.json.JsonParser
+import org.embulk.config.{ConfigLoader, ConfigSource, TaskSource}
+import org.embulk.spi.{ExecAction, ExecInternal, ExecSessionInternal, Schema}
+import org.embulk.test.{EmbulkTestRuntime, PageTestUtils}
 import org.msgpack.value.Value
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.diagrams.Diagrams
 
+import scala.jdk.CollectionConverters._
 import scala.util.Using
-
-object EmbulkPluginTestHelper {
-
-  case class TestRuntimeModule() extends Module {
-
-    override def configure(binder: Binder): Unit = {
-      val systemConfig = new DataSourceImpl(null)
-      new SystemConfigModule(systemConfig).configure(binder)
-      new ExecModule(systemConfig).configure(binder)
-      new ExtensionServiceLoaderModule(systemConfig).configure(binder)
-      new BuiltinPluginSourceModule().configure(binder)
-      new JRubyScriptingModule(systemConfig).configure(binder)
-      new PluginClassLoaderModule().configure(binder)
-      new TestUtilityModule().configure(binder)
-      new TestPluginSourceModule().configure(binder)
-      InjectedPluginSource.registerPluginTo(
-        binder,
-        classOf[OutputPlugin],
-        "s3_parquet",
-        classOf[S3ParquetOutputPlugin]
-      )
-    }
-  }
-
-  def getExecSession: ExecSession = {
-    val injector =
-      Guice.createInjector(Stage.PRODUCTION, TestRuntimeModule())
-    val execConfig = new DataSourceImpl(
-      injector.getInstance(classOf[ModelManager])
-    )
-    ExecSession.builder(injector).fromExecConfig(execConfig).build()
-  }
-}
 
 abstract class EmbulkPluginTestHelper
     extends AnyFunSuite
@@ -87,7 +36,9 @@ abstract class EmbulkPluginTestHelper
     with Diagrams {
   import implicits._
 
-  private var exec: ExecSession = _
+  protected val runtime: EmbulkTestRuntime = new EmbulkTestRuntime()
+
+  private def exec: ExecSessionInternal = runtime.getExec
 
   val TEST_S3_ENDPOINT: String = "http://localhost:4566"
   val TEST_S3_REGION: String = "us-east-1"
@@ -97,13 +48,11 @@ abstract class EmbulkPluginTestHelper
   val TEST_PATH_PREFIX: String = "path/to/parquet-"
 
   before {
-    exec = EmbulkPluginTestHelper.getExecSession
-
     withLocalStackS3Client(_.createBucket(TEST_BUCKET_NAME))
   }
+
   after {
     exec.cleanup()
-    exec = null
 
     withLocalStackS3Client { cli =>
       @scala.annotation.tailrec
@@ -120,7 +69,12 @@ abstract class EmbulkPluginTestHelper
   }
 
   def execDoWith[A](f: => A): A =
-    try Exec.doWith(exec, () => f)
+    try ExecInternal.doWith(
+      exec,
+      new ExecAction[A] {
+        override def run(): A = f
+      }
+    )
     catch {
       case ex: ExecutionException => throw ex.getCause
     }
@@ -132,8 +86,7 @@ abstract class EmbulkPluginTestHelper
       messageTypeTest: MessageType => Unit = { _ => }
   ): Seq[Seq[AnyRef]] = {
     execDoWith {
-      val plugin =
-        exec.getInjector.getInstance(classOf[S3ParquetOutputPlugin])
+      val plugin = new S3ParquetOutputPlugin()
       plugin.transaction(
         outConfig,
         schema,
@@ -244,8 +197,9 @@ abstract class EmbulkPluginTestHelper
       .toSeq
   }
 
-  def loadConfigSourceFromYamlString(yaml: String): ConfigSource =
-    new ConfigLoader(exec.getModelManager).fromYamlString(yaml)
+  def loadConfigSourceFromYamlString(yaml: String): ConfigSource = {
+    new ConfigLoader(runtime.getModelManager).fromYamlString(yaml)
+  }
 
   def newDefaultConfig: ConfigSource =
     loadConfigSourceFromYamlString(

@@ -12,8 +12,7 @@ import org.embulk.spi.`type`.{
   LongType,
   StringType
 }
-import org.embulk.spi.json.JsonParser
-import org.embulk.spi.time.TimestampFormatter
+import org.embulk.util.config.ConfigMapperFactory
 import org.msgpack.value.ValueFactory
 import org.scalatest.diagrams.Diagrams
 import org.scalatest.funsuite.AnyFunSuite
@@ -119,8 +118,6 @@ class TestJsonLogicalType
   }
 
   test("#consumeTimestamp") {
-    val formatter = TimestampFormatter
-      .of("%Y-%m-%d %H:%M:%S.%6N %z", "UTC")
     newMockRecordConsumer().tap { consumer =>
       consumer.writingSampleField {
         // format: off
@@ -131,11 +128,17 @@ class TestJsonLogicalType
   }
 
   test("#consumeJson") {
+    import org.embulk.output.s3_parquet.EmbulkPluginTestHelper
+
+    // Create a helper instance to use the json method
+    val helper = new EmbulkPluginTestHelper {}
+    val jsonValue = helper.json("""{"a":1,"b":"c","d":5.5,"e":true}""")
+
     newMockRecordConsumer().tap { consumer =>
       consumer.writingSampleField {
         JsonLogicalType.consumeJson(
           consumer,
-          new JsonParser().parse("""{"a":1,"b":"c","d":5.5,"e":true}""")
+          jsonValue
         )
       }
       // format: off

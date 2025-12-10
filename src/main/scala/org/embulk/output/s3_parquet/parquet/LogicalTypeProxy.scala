@@ -10,7 +10,8 @@ import org.apache.parquet.schema.PrimitiveType
 import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.catalog.GlueDataType
 import org.embulk.spi.Column
-import org.embulk.spi.time.{Timestamp, TimestampFormatter}
+import org.embulk.spi.time.Timestamp
+import org.embulk.util.timestamp.TimestampFormatter
 import org.msgpack.value.Value
 
 object LogicalTypeProxy {

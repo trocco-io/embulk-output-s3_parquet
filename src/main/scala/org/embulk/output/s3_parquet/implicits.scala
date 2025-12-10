@@ -2,8 +2,6 @@ package org.embulk.output.s3_parquet
 
 import java.util.{Optional, Iterator => JIterator, List => JList, Map => JMap}
 
-import com.google.common.base.{Optional => GoogleOptional}
-
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
@@ -38,14 +36,5 @@ case object implicits {
     case Some(v) => Optional.of(v)
     case None    => Optional.empty()
   }
-
-  implicit def GoogleOptional2Option[A](a: GoogleOptional[A]): Option[A] =
-    Option(a.orNull())
-
-  implicit def Option2GoogleOptional[A](a: Option[A]): GoogleOptional[A] =
-    a match {
-      case Some(v) => GoogleOptional.of(v)
-      case None    => GoogleOptional.absent()
-    }
 
 }

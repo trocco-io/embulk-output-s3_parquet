@@ -5,7 +5,8 @@ import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.catalog.GlueDataType
-import org.embulk.spi.time.{Timestamp, TimestampFormatter}
+import org.embulk.spi.time.Timestamp
+import org.embulk.util.timestamp.TimestampFormatter
 import org.embulk.spi.Column
 import org.embulk.spi.`type`.{
   BooleanType,
@@ -71,7 +72,8 @@ object DefaultColumnType extends ParquetColumnType {
       consumer: RecordConsumer,
       v: Timestamp,
       formatter: TimestampFormatter
-  ): Unit = consumer.addBinary(Binary.fromString(formatter.format(v)))
+  ): Unit =
+    consumer.addBinary(Binary.fromString(formatter.format(v.getInstant)))
   override def consumeJson(consumer: RecordConsumer, v: Value): Unit =
     consumer.addBinary(Binary.fromString(v.toJson))
 }

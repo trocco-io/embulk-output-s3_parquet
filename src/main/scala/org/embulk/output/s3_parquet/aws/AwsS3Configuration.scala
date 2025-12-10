@@ -3,7 +3,7 @@ package org.embulk.output.s3_parquet.aws
 import java.util.Optional
 
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
-import org.embulk.config.{Config, ConfigDefault}
+import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.output.s3_parquet.aws.AwsS3Configuration.Task
 
 /*

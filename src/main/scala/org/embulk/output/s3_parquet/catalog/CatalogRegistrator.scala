@@ -12,7 +12,8 @@ import com.amazonaws.services.glue.model.{
   TableInput
 }
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.embulk.config.{Config, ConfigDefault, ConfigException}
+import org.embulk.util.config.{Config, ConfigDefault}
+import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.aws.Aws
 import org.embulk.output.s3_parquet.implicits
 import org.embulk.spi.{Schema, Column => EmbulkColumn}
@@ -22,7 +23,7 @@ import scala.util.Try
 
 object CatalogRegistrator {
 
-  trait Task extends org.embulk.config.Task {
+  trait Task extends org.embulk.util.config.Task {
     @Config("catalog_id")
     @ConfigDefault("null")
     def getCatalogId: Optional[String]
