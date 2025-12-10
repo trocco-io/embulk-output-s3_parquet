@@ -2,27 +2,15 @@ package org.embulk.output.s3_parquet.aws
 
 import java.util.Optional
 
-import com.amazonaws.auth.{
-  AnonymousAWSCredentials,
-  AWSCredentialsProvider,
-  AWSStaticCredentialsProvider,
-  BasicAWSCredentials,
-  BasicSessionCredentials,
-  DefaultAWSCredentialsProviderChain,
-  EC2ContainerCredentialsProviderWrapper,
-  EnvironmentVariableCredentialsProvider,
-  STSAssumeRoleSessionCredentialsProvider,
-  SystemPropertiesCredentialsProvider,
-  WebIdentityTokenCredentialsProvider
-}
-import com.amazonaws.auth.profile.{
-  ProfileCredentialsProvider,
-  ProfilesConfigFile
-}
 import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.aws.AwsCredentials.Task
 import org.embulk.util.config.units.LocalFile
+import software.amazon.awssdk.auth.credentials._
+import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
+import software.amazon.awssdk.services.sts.StsClient
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest
 
 object AwsCredentials {
 
@@ -84,41 +72,50 @@ object AwsCredentials {
 
 class AwsCredentials(task: Task) {
 
-  def createAwsCredentialsProvider: AWSCredentialsProvider = {
+  def createAwsCredentialsProvider: AwsCredentialsProvider = {
     task.getAuthMethod match {
       case "basic" =>
-        new AWSStaticCredentialsProvider(
-          new BasicAWSCredentials(
+        StaticCredentialsProvider.create(
+          AwsBasicCredentials.create(
             getRequiredOption(task.getAccessKeyId, "access_key_id"),
             getRequiredOption(task.getSecretAccessKey, "secret_access_key")
           )
         )
 
       case "env" =>
-        new EnvironmentVariableCredentialsProvider
+        EnvironmentVariableCredentialsProvider.create()
 
       case "instance" =>
         // NOTE: combination of InstanceProfileCredentialsProvider and ContainerCredentialsProvider
-        new EC2ContainerCredentialsProviderWrapper
+        ContainerCredentialsProvider.builder().build()
 
       case "profile" =>
+        val builder = ProfileCredentialsProvider
+          .builder()
+          .profileName(task.getProfileName)
+
         if (task.getProfileFile.isPresent) {
-          val pf: ProfilesConfigFile = new ProfilesConfigFile(
-            task.getProfileFile.get().getFile
+          builder.profileFile(
+            software.amazon.awssdk.profiles.ProfileFile
+              .builder()
+              .content(task.getProfileFile.get().getFile.toPath)
+              .`type`(
+                software.amazon.awssdk.profiles.ProfileFile.Type.CREDENTIALS
+              )
+              .build()
           )
-          new ProfileCredentialsProvider(pf, task.getProfileName)
         }
-        else new ProfileCredentialsProvider(task.getProfileName)
+        builder.build()
 
       case "properties" =>
-        new SystemPropertiesCredentialsProvider
+        SystemPropertyCredentialsProvider.create()
 
       case "anonymous" =>
-        new AWSStaticCredentialsProvider(new AnonymousAWSCredentials)
+        AnonymousCredentialsProvider.create()
 
       case "session" =>
-        new AWSStaticCredentialsProvider(
-          new BasicSessionCredentials(
+        StaticCredentialsProvider.create(
+          AwsSessionCredentials.create(
             getRequiredOption(task.getAccessKeyId, "access_key_id"),
             getRequiredOption(task.getSecretAccessKey, "secret_access_key"),
             getRequiredOption(task.getSessionToken, "session_token")
@@ -126,36 +123,50 @@ class AwsCredentials(task: Task) {
         )
 
       case "assume_role" =>
-        // NOTE: Are http_proxy, endpoint, region required when assuming role?
-        val builder = new STSAssumeRoleSessionCredentialsProvider.Builder(
-          getRequiredOption(task.getRoleArn, "role_arn"),
-          getRequiredOption(task.getRoleSessionName, "role_session_name")
-        )
-        task.getRoleExternalId.ifPresent(v => builder.withExternalId(v))
-        task.getRoleSessionDurationSeconds.ifPresent(v =>
-          builder.withRoleSessionDurationSeconds(v)
-        )
-        task.getScopeDownPolicy.ifPresent(v => builder.withScopeDownPolicy(v))
+        val stsClient = StsClient
+          .builder()
+          .credentialsProvider(DefaultCredentialsProvider.create())
+          .region(new DefaultAwsRegionProviderChain().getRegion)
+          .build()
 
-        builder.build()
+        val requestBuilder = AssumeRoleRequest
+          .builder()
+          .roleArn(getRequiredOption(task.getRoleArn, "role_arn"))
+          .roleSessionName(
+            getRequiredOption(task.getRoleSessionName, "role_session_name")
+          )
+
+        task.getRoleExternalId.ifPresent(v => requestBuilder.externalId(v))
+        task.getRoleSessionDurationSeconds.ifPresent(v =>
+          requestBuilder.durationSeconds(v)
+        )
+        task.getScopeDownPolicy.ifPresent(v => requestBuilder.policy(v))
+
+        StsAssumeRoleCredentialsProvider
+          .builder()
+          .stsClient(stsClient)
+          .refreshRequest(requestBuilder.build())
+          .build()
 
       case "web_identity_token" =>
-        WebIdentityTokenCredentialsProvider
+        WebIdentityTokenFileCredentialsProvider
           .builder()
           .roleArn(getRequiredOption(task.getRoleArn, "role_arn"))
           .roleSessionName(
             getRequiredOption(task.getRoleSessionName, "role_session_name")
           )
           .webIdentityTokenFile(
-            getRequiredOption(
-              task.getWebIdentityTokenFile,
-              "web_identity_token_file"
+            java.nio.file.Paths.get(
+              getRequiredOption(
+                task.getWebIdentityTokenFile,
+                "web_identity_token_file"
+              )
             )
           )
           .build()
 
       case "default" =>
-        new DefaultAWSCredentialsProviderChain
+        DefaultCredentialsProvider.create()
 
       case am =>
         throw new ConfigException(

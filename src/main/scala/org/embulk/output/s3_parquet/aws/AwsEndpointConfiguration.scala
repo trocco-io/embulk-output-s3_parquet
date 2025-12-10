@@ -1,12 +1,12 @@
 package org.embulk.output.s3_parquet.aws
 
+import java.net.URI
 import java.util.Optional
 
-import com.amazonaws.client.builder.AwsClientBuilder
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
-import com.amazonaws.regions.{DefaultAwsRegionProviderChain, Regions}
 import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.output.s3_parquet.aws.AwsEndpointConfiguration.Task
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
 
 import scala.util.Try
 
@@ -31,23 +31,22 @@ object AwsEndpointConfiguration {
 
 class AwsEndpointConfiguration(task: Task) {
 
-  def configureAwsClientBuilder[S <: AwsClientBuilder[S, T], T](
-      builder: AwsClientBuilder[S, T]
-  ): Unit = {
-    if (task.getRegion.isPresent && task.getEndpoint.isPresent) {
-      val ec =
-        new EndpointConfiguration(task.getEndpoint.get, task.getRegion.get)
-      builder.setEndpointConfiguration(ec)
+  def getRegion: Region = {
+    if (task.getRegion.isPresent) {
+      Region.of(task.getRegion.get())
     }
-    else if (task.getRegion.isPresent && !task.getEndpoint.isPresent) {
-      builder.setRegion(task.getRegion.get)
+    else {
+      Try(new DefaultAwsRegionProviderChain().getRegion)
+        .getOrElse(Region.US_EAST_1)
     }
-    else if (!task.getRegion.isPresent && task.getEndpoint.isPresent) {
-      val r: String = Try(new DefaultAwsRegionProviderChain().getRegion)
-        .getOrElse(Regions.DEFAULT_REGION.getName)
-      val e: String = task.getEndpoint.get
-      val ec = new EndpointConfiguration(e, r)
-      builder.setEndpointConfiguration(ec)
+  }
+
+  def getEndpointOverride: Option[URI] = {
+    if (task.getEndpoint.isPresent) {
+      Some(URI.create(task.getEndpoint.get()))
+    }
+    else {
+      None
     }
   }
 

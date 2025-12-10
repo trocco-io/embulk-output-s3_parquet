@@ -1,11 +1,12 @@
 package org.embulk.output.s3_parquet.aws
 
+import java.net.URI
 import java.util.Optional
 
-import com.amazonaws.{ClientConfiguration, Protocol}
 import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.config.ConfigException
 import org.embulk.output.s3_parquet.aws.HttpProxy.Task
+import software.amazon.awssdk.http.apache.ProxyConfiguration
 
 object HttpProxy {
 
@@ -41,22 +42,35 @@ object HttpProxy {
 
 class HttpProxy(task: Task) {
 
-  def configureClientConfiguration(cc: ClientConfiguration): Unit = {
-    task.getHost.ifPresent(v => cc.setProxyHost(v))
-    task.getPort.ifPresent(v => cc.setProxyPort(v))
+  def createProxyConfiguration: Option[ProxyConfiguration] = {
+    if (task.getHost.isPresent) {
+      val builder = ProxyConfiguration.builder()
 
-    Protocol.values.find(p => p.name().equals(task.getProtocol)) match {
-      case Some(v) =>
-        cc.setProtocol(v)
-      case None =>
-        throw new ConfigException(
-          s"'${task.getProtocol}' is unsupported: `protocol` must be one of [${Protocol.values
-            .map(v => s"'$v'")
-            .mkString(", ")}]."
-        )
+      val host = task.getHost.get()
+      val port =
+        task.getPort.orElse(if (task.getProtocol == "https") 443 else 80)
+      val scheme = task.getProtocol match {
+        case "http"  => "http"
+        case "https" => "https"
+        case other =>
+          throw new ConfigException(
+            s"'$other' is unsupported: `protocol` must be one of ['http', 'https']."
+          )
+      }
+
+      builder.endpoint(URI.create(s"$scheme://$host:$port"))
+
+      task.getUser.ifPresent(u => {
+        task.getPassword.ifPresent(p => {
+          builder.username(u)
+          builder.password(p)
+        })
+      })
+
+      Some(builder.build())
     }
-
-    task.getUser.ifPresent(v => cc.setProxyUsername(v))
-    task.getPassword.ifPresent(v => cc.setProxyPassword(v))
+    else {
+      None
+    }
   }
 }

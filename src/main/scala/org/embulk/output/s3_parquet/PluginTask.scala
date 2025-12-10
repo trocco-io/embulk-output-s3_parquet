@@ -2,7 +2,7 @@ package org.embulk.output.s3_parquet
 
 import java.util.{Locale, MissingFormatArgumentException, Optional}
 
-import com.amazonaws.services.s3.model.CannedAccessControlList
+import software.amazon.awssdk.services.s3.model.ObjectCannedACL
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.embulk.util.config.{
   Config,
@@ -45,8 +45,8 @@ trait PluginTask extends Task with ParquetFileWriteSupport.Task with Aws.Task {
   @ConfigDefault("\"private\"")
   def getCannedAclString: String
 
-  def getCannedAcl: CannedAccessControlList
-  def setCannedAcl(v: CannedAccessControlList): Unit
+  def getCannedAcl: ObjectCannedACL
+  def setCannedAcl(v: ObjectCannedACL): Unit
 
   @Config("block_size")
   @ConfigDefault("null")
@@ -112,15 +112,23 @@ object PluginTask {
     }
 
     // canned_acl
-    CannedAccessControlList
-      .values()
-      .find(_.toString.equals(task.getCannedAclString)) match {
-      case Some(v) => task.setCannedAcl(v)
-      case None =>
+    ObjectCannedACL
+      .knownValues()
+      .stream()
+      .filter(acl =>
+        acl.toString
+          .toLowerCase(Locale.ENGLISH)
+          .equals(task.getCannedAclString.toLowerCase(Locale.ENGLISH))
+      )
+      .findFirst() match {
+      case opt if opt.isPresent => task.setCannedAcl(opt.get())
+      case _ =>
         val unsupported: String = task.getCannedAclString
-        val supported: String = CannedAccessControlList
-          .values()
-          .map(v => s"'${v.toString}'")
+        val supported: String = ObjectCannedACL
+          .knownValues()
+          .stream()
+          .map[String](v => s"'${v.toString}'")
+          .toArray()
           .mkString(", ")
         throw new ConfigException(
           s"'$unsupported' is unsupported: `canned_acl` must be one of [$supported]."
