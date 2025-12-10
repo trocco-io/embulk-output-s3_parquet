@@ -40,9 +40,15 @@ object ParquetFileWriteSupport {
     def getTypeOptions: JMap[String, ParquetColumnType.Task]
     def setTypeOptions(typeOptions: JMap[String, ParquetColumnType.Task]): Unit
 
+    // copy from TimestampFormatter.Task
+    // ref: https://github.com/embulk/embulk/blob/maintain-v0.9/embulk-core/src/main/java/org/embulk/spi/time/TimestampFormatter.java
     @Config("default_timezone")
     @ConfigDefault("\"UTC\"")
-    def getDefaultTimeZone: String
+    def getDefaultTimeZoneId: String
+
+    @Config("default_timestamp_format")
+    @ConfigDefault("\"%Y-%m-%d %H:%M:%S.%6N %z\"")
+    def getDefaultTimestampFormat: String
   }
 
   case class WriterBuilder(path: Path, writeSupport: ParquetFileWriteSupport)
@@ -118,10 +124,10 @@ object ParquetFileWriteSupport {
         val columnOption = task.getColumnOptions.toMap.get(c.getName)
         val format = columnOption
           .flatMap(opt => Optional2Option(opt.getFormat))
-          .getOrElse("%Y-%m-%d %H:%M:%S.%6N %z")
+          .getOrElse(task.getDefaultTimestampFormat)
         val timezone = columnOption
           .flatMap(opt => Optional2Option(opt.getTimeZoneId))
-          .getOrElse(task.getDefaultTimeZone)
+          .getOrElse(task.getDefaultTimeZoneId)
         TimestampFormatter
           .builder(format, true)
           .setDefaultZoneFromString(timezone)
