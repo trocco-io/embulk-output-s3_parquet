@@ -2,9 +2,12 @@ package org.embulk.output.s3_parquet.aws
 
 import java.util.Optional
 
-import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.output.s3_parquet.aws.AwsS3Configuration.Task
+import software.amazon.awssdk.services.s3.{
+  S3ClientBuilder,
+  S3AsyncClientBuilder
+}
 
 /*
  * These are advanced settings, so write no documentation.
@@ -46,23 +49,26 @@ object AwsS3Configuration {
 
 class AwsS3Configuration(task: Task) {
 
-  def configureAmazonS3ClientBuilder(builder: AmazonS3ClientBuilder): Unit = {
-    task.getAccelerateModeEnabled.ifPresent(v =>
-      builder.setAccelerateModeEnabled(v)
-    )
-    task.getChunkedEncodingDisabled.ifPresent(v =>
-      builder.setChunkedEncodingDisabled(v)
-    )
-    task.getDualstackEnabled.ifPresent(v => builder.setDualstackEnabled(v))
+  def configureS3ClientBuilder(builder: S3ClientBuilder): Unit = {
+    task.getAccelerateModeEnabled.ifPresent(v => builder.accelerate(v))
+    task.getDualstackEnabled.ifPresent(v => builder.dualstackEnabled(v))
     task.getForceGlobalBucketAccessEnabled.ifPresent(v =>
-      builder.setForceGlobalBucketAccessEnabled(v)
+      builder.forcePathStyle(!v) // v2では逆の意味になる
     )
-    task.getPathStyleAccessEnabled.ifPresent(v =>
-      builder.setPathStyleAccessEnabled(v)
+    task.getPathStyleAccessEnabled.ifPresent(v => builder.forcePathStyle(v))
+    // Note: chunked_encoding_disabled and payload_signing_enabled are not directly supported in SDK v2
+    // These would need to be configured at the HTTP client level if needed
+  }
+
+  def configureS3ClientBuilder(builder: S3AsyncClientBuilder): Unit = {
+    task.getAccelerateModeEnabled.ifPresent(v => builder.accelerate(v))
+    task.getDualstackEnabled.ifPresent(v => builder.dualstackEnabled(v))
+    task.getForceGlobalBucketAccessEnabled.ifPresent(v =>
+      builder.forcePathStyle(!v) // v2では逆の意味になる
     )
-    task.getPayloadSigningEnabled.ifPresent(v =>
-      builder.setPayloadSigningEnabled(v)
-    )
+    task.getPathStyleAccessEnabled.ifPresent(v => builder.forcePathStyle(v))
+    // Note: chunked_encoding_disabled and payload_signing_enabled are not directly supported in SDK v2
+    // These would need to be configured at the HTTP client level if needed
   }
 
 }

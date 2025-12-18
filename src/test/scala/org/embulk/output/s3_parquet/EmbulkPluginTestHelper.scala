@@ -1,16 +1,21 @@
 package org.embulk.output.s3_parquet
 
 import java.io.File
-import java.nio.file.{Files, Path}
+import java.net.URI
+import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.ExecutionException
 
-import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials}
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
-import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
-import com.amazonaws.services.s3.model.ObjectListing
-import com.amazonaws.services.s3.transfer.{
-  TransferManager,
-  TransferManagerBuilder
+import software.amazon.awssdk.auth.credentials.{
+  AwsBasicCredentials,
+  StaticCredentialsProvider
+}
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.s3.{S3Client, S3AsyncClient}
+import software.amazon.awssdk.services.s3.model._
+import software.amazon.awssdk.transfer.s3.S3TransferManager
+import software.amazon.awssdk.transfer.s3.model.{
+  DownloadDirectoryRequest,
+  DirectoryDownload
 }
 import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
@@ -48,7 +53,11 @@ abstract class EmbulkPluginTestHelper
   val TEST_PATH_PREFIX: String = "path/to/parquet-"
 
   before {
-    withLocalStackS3Client(_.createBucket(TEST_BUCKET_NAME))
+    withLocalStackS3Client(
+      _.createBucket(
+        CreateBucketRequest.builder().bucket(TEST_BUCKET_NAME).build()
+      )
+    )
   }
 
   after {
@@ -56,16 +65,32 @@ abstract class EmbulkPluginTestHelper
 
     withLocalStackS3Client { cli =>
       @scala.annotation.tailrec
-      def rmRecursive(listing: ObjectListing): Unit = {
-        listing.getObjectSummaries.foreach(o =>
-          cli.deleteObject(TEST_BUCKET_NAME, o.getKey)
-        )
-        if (listing.isTruncated)
-          rmRecursive(cli.listNextBatchOfObjects(listing))
+      def rmRecursive(continuationToken: Option[String]): Unit = {
+        val requestBuilder = ListObjectsV2Request
+          .builder()
+          .bucket(TEST_BUCKET_NAME)
+        continuationToken.foreach(requestBuilder.continuationToken)
+
+        val response = cli.listObjectsV2(requestBuilder.build())
+        response.contents().asScala.foreach { obj =>
+          cli.deleteObject(
+            DeleteObjectRequest
+              .builder()
+              .bucket(TEST_BUCKET_NAME)
+              .key(obj.key())
+              .build()
+          )
+        }
+        if (response.isTruncated)
+          rmRecursive(Some(response.nextContinuationToken()))
       }
-      rmRecursive(cli.listObjects(TEST_BUCKET_NAME))
+      rmRecursive(None)
     }
-    withLocalStackS3Client(_.deleteBucket(TEST_BUCKET_NAME))
+    withLocalStackS3Client(
+      _.deleteBucket(
+        DeleteBucketRequest.builder().bucket(TEST_BUCKET_NAME).build()
+      )
+    )
   }
 
   def execDoWith[A](f: => A): A =
@@ -117,24 +142,24 @@ abstract class EmbulkPluginTestHelper
     readS3Parquet(TEST_BUCKET_NAME, TEST_PATH_PREFIX, messageTypeTest)
   }
 
-  private def withLocalStackS3Client[A](f: AmazonS3 => A): A = {
-    val client: AmazonS3 = AmazonS3ClientBuilder.standard
-      .withEndpointConfiguration(
-        new EndpointConfiguration(TEST_S3_ENDPOINT, TEST_S3_REGION)
-      )
-      .withCredentials(
-        new AWSStaticCredentialsProvider(
-          new BasicAWSCredentials(
+  private def withLocalStackS3Client[A](f: S3Client => A): A = {
+    val client: S3Client = S3Client
+      .builder()
+      .endpointOverride(URI.create(TEST_S3_ENDPOINT))
+      .region(Region.of(TEST_S3_REGION))
+      .credentialsProvider(
+        StaticCredentialsProvider.create(
+          AwsBasicCredentials.create(
             TEST_S3_ACCESS_KEY_ID,
             TEST_S3_SECRET_ACCESS_KEY
           )
         )
       )
-      .withPathStyleAccessEnabled(true)
+      .forcePathStyle(true)
       .build()
 
     try f(client)
-    finally client.shutdown()
+    finally client.close()
   }
 
   private def readS3Parquet(
@@ -143,15 +168,42 @@ abstract class EmbulkPluginTestHelper
       messageTypeTest: MessageType => Unit = { _ => }
   ): Seq[Seq[AnyRef]] = {
     val tmpDir: Path = Files.createTempDirectory("embulk-output-parquet")
-    withLocalStackS3Client { s3 =>
-      val xfer: TransferManager = TransferManagerBuilder
-        .standard()
-        .withS3Client(s3)
+
+    val s3AsyncClient = S3AsyncClient
+      .builder()
+      .endpointOverride(URI.create(TEST_S3_ENDPOINT))
+      .region(Region.of(TEST_S3_REGION))
+      .credentialsProvider(
+        StaticCredentialsProvider.create(
+          AwsBasicCredentials.create(
+            TEST_S3_ACCESS_KEY_ID,
+            TEST_S3_SECRET_ACCESS_KEY
+          )
+        )
+      )
+      .forcePathStyle(true)
+      .build()
+
+    val transferManager =
+      S3TransferManager.builder().s3Client(s3AsyncClient).build()
+
+    try {
+      val downloadRequest = DownloadDirectoryRequest
+        .builder()
+        .destination(tmpDir)
+        .bucket(bucket)
+        .listObjectsV2RequestTransformer(builder =>
+          builder.prefix(prefix).build()
+        )
         .build()
-      try xfer
-        .downloadDirectory(bucket, prefix, tmpDir.toFile)
-        .waitForCompletion()
-      finally xfer.shutdownNow()
+
+      val directoryDownload: DirectoryDownload =
+        transferManager.downloadDirectory(downloadRequest)
+      directoryDownload.completionFuture().join()
+    }
+    finally {
+      transferManager.close()
+      s3AsyncClient.close()
     }
 
     def listFiles(file: File): Seq[File] = {

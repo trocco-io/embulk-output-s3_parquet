@@ -2,15 +2,6 @@ package org.embulk.output.s3_parquet.catalog
 
 import java.util.{Optional, Map => JMap}
 
-import com.amazonaws.services.glue.model.{
-  Column,
-  CreateTableRequest,
-  DeleteTableRequest,
-  GetTableRequest,
-  SerDeInfo,
-  StorageDescriptor,
-  TableInput
-}
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.config.ConfigException
@@ -18,7 +9,9 @@ import org.embulk.output.s3_parquet.aws.Aws
 import org.embulk.output.s3_parquet.implicits
 import org.embulk.spi.{Schema, Column => EmbulkColumn}
 import org.slf4j.{Logger, LoggerFactory}
+import software.amazon.awssdk.services.glue.model._
 
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object CatalogRegistrator {
@@ -112,82 +105,100 @@ case class CatalogRegistrator(
   }
 
   def showNewTableInfo(): Unit = {
-    val req = new GetTableRequest()
-    catalogId.foreach(req.setCatalogId)
-    req.setDatabaseName(database)
-    req.setName(table)
+    val requestBuilder = GetTableRequest
+      .builder()
+      .databaseName(database)
+      .name(table)
 
-    val t = aws.withGlue(_.getTable(req)).getTable
+    catalogId.foreach(requestBuilder.catalogId)
+
+    val t = aws.withGlue(_.getTable(requestBuilder.build())).table()
     logger.info(s"Created a table: ${t.toString}")
   }
 
   def doesTableExists(): Boolean = {
-    val req = new GetTableRequest()
-    catalogId.foreach(req.setCatalogId)
-    req.setDatabaseName(database)
-    req.setName(table)
+    val requestBuilder = GetTableRequest
+      .builder()
+      .databaseName(database)
+      .name(table)
 
-    Try(aws.withGlue(_.getTable(req))).isSuccess
+    catalogId.foreach(requestBuilder.catalogId)
+
+    Try(aws.withGlue(_.getTable(requestBuilder.build()))).isSuccess
   }
 
   def deleteTable(): Unit = {
-    val req = new DeleteTableRequest()
-    catalogId.foreach(req.setCatalogId)
-    req.setDatabaseName(database)
-    req.setName(table)
-    aws.withGlue(_.deleteTable(req))
+    val requestBuilder = DeleteTableRequest
+      .builder()
+      .databaseName(database)
+      .name(table)
+
+    catalogId.foreach(requestBuilder.catalogId)
+
+    aws.withGlue(_.deleteTable(requestBuilder.build()))
   }
 
   def registerNewParquetTable(): Unit = {
     logger.info(s"Create a new table: ${database}.${table}")
-    val req = new CreateTableRequest()
-    catalogId.foreach(req.setCatalogId)
-    req.setDatabaseName(database)
-    req.setTableInput(
-      new TableInput()
-        .withName(table)
-        .withDescription("Created by embulk-output-s3_parquet")
-        .withTableType("EXTERNAL_TABLE")
-        .withParameters(
-          Map(
-            "EXTERNAL" -> "TRUE",
-            "classification" -> "parquet",
-            "parquet.compression" -> compressionCodec.name()
+
+    val tableInputBuilder = TableInput
+      .builder()
+      .name(table)
+      .description("Created by embulk-output-s3_parquet")
+      .tableType("EXTERNAL_TABLE")
+      .parameters(
+        Map(
+          "EXTERNAL" -> "TRUE",
+          "classification" -> "parquet",
+          "parquet.compression" -> compressionCodec.name()
+        ).asJava
+      )
+      .storageDescriptor(
+        StorageDescriptor
+          .builder()
+          .columns(getGlueSchema.asJava)
+          .location(location)
+          .compressed(isCompressed)
+          .inputFormat(
+            "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
           )
-        )
-        .withStorageDescriptor(
-          new StorageDescriptor()
-            .withColumns(getGlueSchema: _*)
-            .withLocation(location)
-            .withCompressed(isCompressed)
-            .withInputFormat(
-              "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
-            )
-            .withOutputFormat(
-              "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
-            )
-            .withSerdeInfo(
-              new SerDeInfo()
-                .withSerializationLibrary(
-                  "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
-                )
-                .withParameters(Map("serialization.format" -> "1"))
-            )
-        )
-    )
-    aws.withGlue(_.createTable(req))
+          .outputFormat(
+            "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+          )
+          .serdeInfo(
+            SerDeInfo
+              .builder()
+              .serializationLibrary(
+                "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+              )
+              .parameters(Map("serialization.format" -> "1").asJava)
+              .build()
+          )
+          .build()
+      )
+
+    val requestBuilder = CreateTableRequest
+      .builder()
+      .databaseName(database)
+      .tableInput(tableInputBuilder.build())
+
+    catalogId.foreach(requestBuilder.catalogId)
+
+    aws.withGlue(_.createTable(requestBuilder.build()))
   }
 
   private def getGlueSchema: Seq[Column] = {
     schema.getColumns.map { c: EmbulkColumn =>
-      new Column()
-        .withName(c.getName)
-        .withType(
+      Column
+        .builder()
+        .name(c.getName)
+        .`type`(
           columnOptions
             .get(c.getName)
             .map(_.getType)
             .getOrElse(defaultGlueTypes(c).name)
         )
+        .build()
     }
   }
 

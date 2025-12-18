@@ -23,14 +23,14 @@ dependencies {
     implementation "org.embulk:embulk-util-timestamp:0.2.2"
     implementation "org.scala-lang:scala-library:2.13.1"
 
-    ['glue', 's3', 'sts'].each { v ->
-        implementation("com.amazonaws:aws-java-sdk-${v}:1.11.769") {
-            exclude group: 'joda-time', module: 'joda-time'
-            exclude group: 'com.fasterxml.jackson.core', module: 'jackson-annotations'
-            exclude group: 'com.fasterxml.jackson.core', module: 'jackson-databind'
-            exclude group: 'com.fasterxml.jackson.core', module: 'jackson-core'
-        }
-    }
+    // AWS SDK v2
+    implementation platform('software.amazon.awssdk:bom:2.20.0')
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:glue'
+    implementation 'software.amazon.awssdk:sts'
+    implementation 'software.amazon.awssdk:s3-transfer-manager'
+    implementation 'software.amazon.awssdk:apache-client'
+    implementation 'software.amazon.awssdk.crt:aws-crt:0.21.0'
     ['column', 'common', 'encoding', 'hadoop', 'jackson'].each { v ->
         implementation("org.apache.parquet:parquet-${v}:1.11.0") {
             exclude group: 'org.slf4j', module: 'slf4j-api'

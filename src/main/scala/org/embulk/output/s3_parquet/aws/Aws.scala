@@ -1,12 +1,9 @@
 package org.embulk.output.s3_parquet.aws
 
-import com.amazonaws.client.builder.AwsClientBuilder
-import com.amazonaws.services.glue.{AWSGlue, AWSGlueClientBuilder}
-import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
-import com.amazonaws.services.s3.transfer.{
-  TransferManager,
-  TransferManagerBuilder
-}
+import software.amazon.awssdk.services.glue.GlueClient
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.S3AsyncClient
+import software.amazon.awssdk.transfer.s3.S3TransferManager
 
 object Aws {
 
@@ -24,35 +21,75 @@ object Aws {
 
 class Aws(task: Aws.Task) {
 
-  def withS3[A](f: AmazonS3 => A): A = {
-    val builder: AmazonS3ClientBuilder = AmazonS3ClientBuilder.standard()
-    AwsS3Configuration(task).configureAmazonS3ClientBuilder(builder)
-    val svc = createService(builder)
+  def withS3[A](f: S3Client => A): A = {
+    val svc = createS3Client()
     try f(svc)
-    finally svc.shutdown()
+    finally svc.close()
   }
 
-  def withTransferManager[A](f: TransferManager => A): A = {
-    withS3 { s3 =>
-      val svc = TransferManagerBuilder.standard().withS3Client(s3).build()
-      try f(svc)
-      finally svc.shutdownNow(false)
-    }
-  }
-
-  def withGlue[A](f: AWSGlue => A): A = {
-    val builder: AWSGlueClientBuilder = AWSGlueClientBuilder.standard()
-    val svc = createService(builder)
+  def withTransferManager[A](f: S3TransferManager => A): A = {
+    val svc = createTransferManager()
     try f(svc)
-    finally svc.shutdown()
+    finally svc.close()
   }
 
-  def createService[S <: AwsClientBuilder[S, T], T](
-      builder: AwsClientBuilder[S, T]
-  ): T = {
-    AwsEndpointConfiguration(task).configureAwsClientBuilder(builder)
-    AwsClientConfiguration(task).configureAwsClientBuilder(builder)
-    builder.setCredentials(AwsCredentials(task).createAwsCredentialsProvider)
+  def withGlue[A](f: GlueClient => A): A = {
+    val svc = createGlueClient()
+    try f(svc)
+    finally svc.close()
+  }
+
+  private def createS3Client(): S3Client = {
+    val endpointConfig = AwsEndpointConfiguration(task)
+    val clientConfig = AwsClientConfiguration(task)
+    val s3Config = AwsS3Configuration(task)
+
+    val builder = S3Client
+      .builder()
+      .credentialsProvider(AwsCredentials(task).createAwsCredentialsProvider)
+      .region(endpointConfig.getRegion)
+      .httpClientBuilder(clientConfig.createHttpClientBuilder)
+
+    endpointConfig.getEndpointOverride.foreach(builder.endpointOverride)
+    s3Config.configureS3ClientBuilder(builder)
+
+    builder.build()
+  }
+
+  private def createS3AsyncClient(): S3AsyncClient = {
+    val endpointConfig = AwsEndpointConfiguration(task)
+    val s3Config = AwsS3Configuration(task)
+
+    val builder = S3AsyncClient
+      .builder()
+      .credentialsProvider(AwsCredentials(task).createAwsCredentialsProvider)
+      .region(endpointConfig.getRegion)
+
+    endpointConfig.getEndpointOverride.foreach(builder.endpointOverride)
+    s3Config.configureS3ClientBuilder(builder)
+
+    builder.build()
+  }
+
+  private def createTransferManager(): S3TransferManager = {
+    val s3AsyncClient = createS3AsyncClient()
+    S3TransferManager
+      .builder()
+      .s3Client(s3AsyncClient)
+      .build()
+  }
+
+  private def createGlueClient(): GlueClient = {
+    val endpointConfig = AwsEndpointConfiguration(task)
+    val clientConfig = AwsClientConfiguration(task)
+
+    val builder = GlueClient
+      .builder()
+      .credentialsProvider(AwsCredentials(task).createAwsCredentialsProvider)
+      .region(endpointConfig.getRegion)
+      .httpClientBuilder(clientConfig.createHttpClientBuilder)
+
+    endpointConfig.getEndpointOverride.foreach(builder.endpointOverride)
 
     builder.build()
   }

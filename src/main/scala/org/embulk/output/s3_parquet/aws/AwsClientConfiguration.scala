@@ -2,10 +2,9 @@ package org.embulk.output.s3_parquet.aws
 
 import java.util.Optional
 
-import com.amazonaws.ClientConfiguration
-import com.amazonaws.client.builder.AwsClientBuilder
 import org.embulk.util.config.{Config, ConfigDefault}
 import org.embulk.output.s3_parquet.aws.AwsClientConfiguration.Task
+import software.amazon.awssdk.http.apache.ApacheHttpClient
 
 object AwsClientConfiguration {
 
@@ -24,14 +23,16 @@ object AwsClientConfiguration {
 
 class AwsClientConfiguration(task: Task) {
 
-  def configureAwsClientBuilder[S <: AwsClientBuilder[S, T], T](
-      builder: AwsClientBuilder[S, T]
-  ): Unit = {
-    task.getHttpProxy.ifPresent { v =>
-      val cc = new ClientConfiguration
-      HttpProxy(v).configureClientConfiguration(cc)
-      builder.setClientConfiguration(cc)
+  def createHttpClientBuilder: ApacheHttpClient.Builder = {
+    val builder = ApacheHttpClient.builder()
+
+    task.getHttpProxy.ifPresent { proxyTask =>
+      HttpProxy(proxyTask).createProxyConfiguration.foreach { proxyConfig =>
+        builder.proxyConfiguration(proxyConfig)
+      }
     }
+
+    builder
   }
 
 }
